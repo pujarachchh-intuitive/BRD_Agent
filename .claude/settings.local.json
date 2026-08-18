@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip show *)",
+      "Bash(pandoc --version)",
+      "Bash(mmdc --version)",
+      "Read(//c/Users/PujaRachchh\\\\\\(DataAI\\\\\\)/**)",
+      "Bash(grep -v -i \"node_modules\\\\|AppData\\\\\\\\\\\\\\\\Local\\\\\\\\\\\\\\\\Temp\")",
+      "PowerShell(python --version)",
+      "PowerShell(pip --version)",
+      "PowerShell(pip show google-adk 2>&1)",
+      "PowerShell(python -c \"import sys; print\\(sys.executable\\)\")",
+      "PowerShell(py --version 2>&1)",
+      "PowerShell(py -m pip --version)",
+      "PowerShell(py -m pip show google-adk 2>&1)",
+      "PowerShell(py -m pip index versions google-adk 2>&1)",
+      "WebSearch",
+      "WebFetch(domain:ai.google.dev)",
+      "Bash(cd \"c:\\\\Users\\\\PujaRachchh\\(DataAI\\)\\\\Intuitive\\\\BRD_Agent\" && mkdir -p brd_agent_suite/sub_agents brd_agent_suite/prompts brd_agent_suite/output && ls -la brd_agent_suite)",
+      "Bash(mkdir -p /c/temp_mmd_test)",
+      "Bash(cp \"C:/Users/PUJARA~1/AppData/Local/Temp/claude/c--Users-PujaRachchh-DataAI--Intuitive-BRD-Agent/3024bce7-8b1d-4cbc-9e87-97f7ee176d37/scratchpad/diagram.html\" /c/temp_mmd_test/)",
+      "Bash(cp \"C:/Users/PUJARA~1/AppData/Local/Temp/claude/c--Users-PujaRachchh-DataAI--Intuitive-BRD-Agent/3024bce7-8b1d-4cbc-9e87-97f7ee176d37/scratchpad/mermaid.min.js\" /c/temp_mmd_test/)",
+      "Bash(\"/c/Program Files \\(x86\\)/Microsoft/Edge/Application/msedge.exe\" --headless --disable-gpu --no-sandbox --virtual-time-budget=4000 --window-size=1000,700 --screenshot=\"C:/temp_mmd_test/shot.png\" \"file:///C:/temp_mmd_test/diagram.html\")",
+      "Bash(echo \"EXIT:$?\")"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\PujaRachchh(DataAI)\\Intuitive\\BRD_Agent\\brd_agent_suite"
+    ]
+  }
+}

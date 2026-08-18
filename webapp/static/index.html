@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BRD Agent Suite</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-inner">
+      <h1>BRD Agent Suite</h1>
+      <div class="header-actions">
+        <select id="run-history" aria-label="Load a previous run">
+          <option value="">Load a previous run…</option>
+        </select>
+        <button id="new-request-btn" type="button" class="btn btn-secondary" hidden>New Request</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div id="error-banner" class="error-banner" hidden role="alert"></div>
+
+    
+
+    <section id="form-section">
+      <p class="intro">
+        Describe your project below. Leave anything blank or tick "Auto-generate" on a field you'd
+        rather the AI infer — everything you do fill in is kept exactly as written.
+      </p>
+      <form id="brd-form">
+        <div id="form-sections"></div>
+        <div class="form-submit-row">
+          <button type="submit" id="generate-btn" class="btn btn-primary btn-large">Generate Documents</button>
+        </div>
+      </form>
+    </section>
+
+    <section id="results-section" hidden>
+      <div class="run-badge" id="run-badge"></div>
+
+      <div id="assumptions-panel" class="panel assumptions-panel" hidden>
+        <h2>Here's what I assumed</h2>
+        <ul id="assumptions-list"></ul>
+      </div>
+
+      <div id="consistency-panel" class="panel consistency-panel" hidden>
+        <h2>Consistency Check</h2>
+        <div id="consistency-content"></div>
+      </div>
+
+      <div class="tabs-bar">
+        <nav class="tabs" id="doc-tabs">
+          <button type="button" class="tab-btn active" data-tab="brd">BRD</button>
+          <button type="button" class="tab-btn" data-tab="tsd">TSD</button>
+          <button type="button" class="tab-btn" data-tab="flowchart">Flowchart</button>
+          <button type="button" class="tab-btn" data-tab="architecture">Architecture</button>
+          <button type="button" class="tab-btn" data-tab="onepager">One-Pager</button>
+        </nav>
+      </div>
+
+      <div class="tab-panels" id="tab-panels"></div>
+
+      <div class="panel revise-panel">
+        <h2>Request a change</h2>
+        <p class="field-helper">Describe what you'd like changed. This creates a new revision run without losing the current one.</p>
+        <textarea id="revise-input" rows="3" placeholder="e.g. Add a risk about vendor lock-in, or make the timeline 4 phases instead of 3."></textarea>
+        <button id="revise-btn" type="button" class="btn btn-primary">Apply Change</button>
+      </div>
+    </section>
+  </main>
+
+  <div id="print-root" class="print-root"></div>
+
+  <script src="vendor/mermaid.min.js"></script>
+  <script src="vendor/marked.min.js"></script>
+  <script src="form-config.js"></script>
+  <script src="documents.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
