@@ -37,6 +37,7 @@ const FIELD_DEFS = {
     input: "text",
     placeholder: "e.g. FBH",
     helper: "3-5 letter acronym. Leave blank to auto-generate from the project name.",
+    noExclude: true,
   },
   problem_statement: {
     kind: "scalar",
@@ -50,6 +51,7 @@ const FIELD_DEFS = {
     kind: "scalar",
     label: "Business Context",
     input: "textarea",
+    noExclude: true,
   },
   decision_audience: {
     kind: "scalar",
@@ -62,6 +64,7 @@ const FIELD_DEFS = {
     kind: "list_str",
     label: "In Scope",
     helper: "What's explicitly in scope",
+    noExclude: true,
   },
   scope_permanently_excluded: {
     kind: "list_str",
@@ -87,11 +90,13 @@ const FIELD_DEFS = {
     kind: "list_str",
     label: "Tech Stack Preferences",
     helper: "Preferred languages/frameworks/services, if any",
+    noExclude: true,
   },
   data_flow_steps: {
     kind: "list_str",
     label: "Data Flow Steps",
     helper: "The sequential steps data/requests move through (order matters)",
+    noExclude: true,
   },
   integrations: {
     kind: "list_str",
@@ -112,6 +117,7 @@ const FIELD_DEFS = {
       { name: "objective", label: "Objective", type: "text" },
       { name: "success_measure", label: "Success Measure", type: "text" },
     ],
+    noExclude: true,
   },
   stakeholders: {
     kind: "list_obj",
@@ -139,6 +145,7 @@ const FIELD_DEFS = {
       { name: "item", label: "Item", type: "text" },
       { name: "why_deferred", label: "Why Deferred", type: "text" },
     ],
+    noExclude: true,
   },
   functional_requirements: {
     kind: "list_obj",
@@ -148,6 +155,7 @@ const FIELD_DEFS = {
       { name: "description", label: "Description", type: "text" },
       { name: "priority", label: "Priority", type: "select", options: ["M", "S", "C"], default: "M" },
     ],
+    noExclude: true,
   },
   non_functional_requirements: {
     kind: "list_obj",
@@ -156,6 +164,7 @@ const FIELD_DEFS = {
       { name: "category", label: "Category", type: "text", placeholder: "e.g. Performance" },
       { name: "requirement", label: "Requirement", type: "text" },
     ],
+    noExclude: true,
   },
   risks: {
     kind: "list_obj",
@@ -165,6 +174,7 @@ const FIELD_DEFS = {
       { name: "impact", label: "Impact", type: "select", options: ["High", "Medium", "Low"], default: "Medium" },
       { name: "mitigation", label: "Mitigation", type: "text" },
     ],
+    noExclude: true,
   },
   system_components: {
     kind: "list_obj",
@@ -174,6 +184,7 @@ const FIELD_DEFS = {
       { name: "responsibility", label: "Responsibility", type: "text" },
       { name: "interacts_with", label: "Interacts With", type: "text", placeholder: "comma-separated, e.g. API, Database", isList: true },
     ],
+    noExclude: true,
   },
   timeline_phases: {
     kind: "list_obj",
@@ -183,6 +194,7 @@ const FIELD_DEFS = {
       { name: "content", label: "Content", type: "text" },
       { name: "exit_criteria", label: "Exit Criteria", type: "text" },
     ],
+    noExclude: true,
   },
   additional_sections: {
     kind: "list_obj",

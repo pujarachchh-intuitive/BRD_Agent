@@ -165,8 +165,14 @@ function buildFieldRow(name, def) {
   const headerRow = document.createElement("div");
   headerRow.className = "field-header";
 
+  // critical: foundational identity, can't be invented or omitted (no auto, no exclude).
+  // noExclude: must always appear in the document per the reference BRDs/TSDs — every structural
+  // section in both real examples was substantively populated, none were blank/omitted — but the AI
+  // can still help fill it in.
+  // skipToggles: additional_sections only — neither concept applies to purely optional user content.
+  const isRequired = def.critical || def.noExclude;
   const label = document.createElement("label");
-  label.textContent = def.critical ? `${def.label} (required)` : def.label;
+  label.textContent = isRequired ? `${def.label} (required)` : def.label;
   if (def.kind !== "list_obj") label.htmlFor = `field-${name}`;
   headerRow.appendChild(label);
 
@@ -176,8 +182,9 @@ function buildFieldRow(name, def) {
 
   let autoCheckbox = null;
   let excludeCheckbox = null;
-  const showToggles = !def.critical && !def.skipToggles;
-  if (showToggles) {
+  const showAuto = !def.critical && !def.skipToggles;
+  const showExclude = showAuto && !def.noExclude;
+  if (showAuto) {
     const autoWrap = document.createElement("label");
     autoWrap.className = "auto-toggle";
     autoCheckbox = document.createElement("input");
@@ -186,7 +193,8 @@ function buildFieldRow(name, def) {
     autoWrap.appendChild(autoCheckbox);
     autoWrap.appendChild(document.createTextNode(" Auto-generate / enrich"));
     toggles.appendChild(autoWrap);
-
+  }
+  if (showExclude) {
     const excludeWrap = document.createElement("label");
     excludeWrap.className = "exclude-toggle";
     excludeCheckbox = document.createElement("input");
@@ -236,8 +244,9 @@ function buildFieldRow(name, def) {
   if (autoCheckbox) {
     autoCheckbox.addEventListener("change", () => {
       // Auto-generate and exclude are mutually exclusive: enriching a section and omitting it
-      // entirely can't both be true at once.
-      if (autoCheckbox.checked && excludeCheckbox.checked) {
+      // entirely can't both be true at once. (excludeCheckbox may not exist at all for a noExclude
+      // field — it always has auto available but never an exclude option.)
+      if (autoCheckbox.checked && excludeCheckbox && excludeCheckbox.checked) {
         excludeCheckbox.checked = false;
         setFieldExcludeState(wrap, name, def, false);
       }
@@ -246,7 +255,7 @@ function buildFieldRow(name, def) {
   }
   if (excludeCheckbox) {
     excludeCheckbox.addEventListener("change", () => {
-      if (excludeCheckbox.checked && autoCheckbox.checked) {
+      if (excludeCheckbox.checked && autoCheckbox && autoCheckbox.checked) {
         autoCheckbox.checked = false;
         setFieldAutoState(wrap, name, def, false);
       }

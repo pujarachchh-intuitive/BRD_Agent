@@ -202,7 +202,6 @@ textarea {
 }
 
 .loading-section {
-  display: flex;
   align-items: center;
   gap: 0.9rem;
   background: var(--color-surface);
@@ -211,6 +210,13 @@ textarea {
   padding: 1.1rem 1.3rem;
   margin-bottom: 1.25rem;
   box-shadow: var(--shadow-sm);
+}
+
+/* An unconditional `display` here would override the browser's default handling of the `hidden`
+   attribute (author CSS always wins over the user-agent stylesheet), so the section would stay
+   visible even while JS sets .hidden = true. Only apply flex layout when NOT hidden. */
+.loading-section:not([hidden]) {
+  display: flex;
 }
 
 .spinner {

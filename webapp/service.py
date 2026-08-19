@@ -46,9 +46,27 @@ FORM_FIELDS: list[tuple[str, str]] = [
     ("additional_sections", "list_obj"),
 ]
 
-# Fields with no auto-generate/exclude option at all (foundational — the UI enforces this too, this
-# is the backend-side backstop). Never allowed in excluded_sections.
-CRITICAL_FIELDS = {"project_name", "problem_statement", "target_users", "stakeholders", "functional_requirements"}
+# Fields with no exclude option at all in the UI — derived from the reference BRDs/TSDs, where every
+# structural section (objectives, scope-in, requirements, NFRs, risks, architecture, tech stack, data
+# flow, timeline) was substantively populated in every real example; none appeared blank or omitted.
+# This is the backend-side backstop for that — never allowed in excluded_sections regardless of what
+# a raw API request claims. A subset of these (CRITICAL_FIELDS) additionally have no auto-generate
+# option in the UI, since they're foundational identity fields no context could invent from scratch.
+CRITICAL_FIELDS = {"project_name", "problem_statement", "target_users", "stakeholders"}
+NEVER_EXCLUDABLE_FIELDS = CRITICAL_FIELDS | {
+    "doc_id_acronym",
+    "business_context",
+    "objectives",
+    "scope_in",
+    "scope_deferred",
+    "functional_requirements",
+    "non_functional_requirements",
+    "risks",
+    "tech_stack_preferences",
+    "system_components",
+    "data_flow_steps",
+    "timeline_phases",
+}
 
 # Fields whose list items get a server-assigned sequential ID (the user never types one).
 _ID_PREFIXES = {
@@ -76,9 +94,10 @@ def normalize_form(form: dict[str, Any], excluded_sections: Optional[list[str]] 
     objectives/functional_requirements/risks either way.
 
     excluded_sections are field names the user said don't apply to this project — forced empty here
-    regardless of whatever the form happened to submit for them, and never allowed on a critical field.
+    regardless of whatever the form happened to submit for them, and never allowed on a field the
+    reference documents show as always populated (NEVER_EXCLUDABLE_FIELDS).
     """
-    excluded = set(excluded_sections or []) - CRITICAL_FIELDS
+    excluded = set(excluded_sections or []) - NEVER_EXCLUDABLE_FIELDS
     result: dict[str, Any] = {"assumptions": [], "excluded_sections": sorted(excluded)}
     for field, kind in FORM_FIELDS:
         if field in excluded:
