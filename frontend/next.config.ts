@@ -16,6 +16,9 @@ const nextConfig: NextConfig = {
   // by default. Visiting via 127.0.0.1 instead of localhost otherwise triggers harmless-looking but
   // noisy 403s / failed HMR websocket errors in the console.
   allowedDevOrigins: ["127.0.0.1", "localhost"],
+  // Hides the floating dev-mode badge (route/build indicator) — purely cosmetic, but it sits right
+  // over the sidebar footer and is worth turning off for a clean demo.
+  devIndicators: false,
   async rewrites() {
     return [
       {

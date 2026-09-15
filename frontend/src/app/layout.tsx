@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Sidebar from "@/components/layout/Sidebar";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -23,7 +24,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     // attributes like data-island-script-injectable onto <html> before React hydrates. That's a
     // real DOM difference, but not one our code causes or can avoid — only silence it here.
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} antialiased`} suppressHydrationWarning>
-      <body>{children}</body>
+      <body>
+        <div className="app-shell">
+          <Sidebar />
+          <div className="app-main">{children}</div>
+        </div>
+      </body>
     </html>
   );
 }

@@ -115,4 +115,12 @@ export function validateRequiredFields(form: FormState, excludedSections: string
   );
 }
 
+/** Loose "has something in it" check for a draft field — used only for the section-nav progress
+ * dots, not for submit validation (validateRequiredFields is the authoritative check). */
+export function isDraftValueFilled(value: string | DraftRepeaterRow[] | undefined): boolean {
+  if (value === undefined) return false;
+  if (typeof value === "string") return value.trim().length > 0;
+  return value.some((row) => Object.values(row).some((v) => v.trim().length > 0));
+}
+
 export { FIELD_DEFS, FORM_SECTIONS };

@@ -1,3 +1,4 @@
+import { CheckCircle2, AlertTriangle } from "lucide-react";
 import { marked } from "marked";
 
 export default function ConsistencyPanel({ reportMd }: { reportMd: string | null }) {
@@ -8,16 +9,17 @@ export default function ConsistencyPanel({ reportMd }: { reportMd: string | null
   const html = marked.parse(reportMd, { async: false }) as string;
 
   return (
-    <div
-      className="panel mb-5"
-      style={
-        looksClean
-          ? { background: "var(--color-success-bg)", borderColor: "var(--color-success-border)" }
-          : { background: "var(--color-warn-bg)", borderColor: "var(--color-warn-border)" }
-      }
-    >
-      <h2 style={{ color: looksClean ? "var(--color-success-text)" : "var(--color-warn-text)" }}>Consistency Check</h2>
-      <div className="markdown-body prose prose-slate [&>*:first-child]:mt-0" dangerouslySetInnerHTML={{ __html: html }} />
-    </div>
+    <details className="card mb-5 px-5 py-4">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+        <span className="flex items-center gap-2 font-semibold" style={{ color: "var(--color-text)" }}>
+          Consistency check
+        </span>
+        <span className={`chip ${looksClean ? "chip-success" : "chip-warn"}`}>
+          {looksClean ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}
+          {looksClean ? "Passed" : "Needs review"}
+        </span>
+      </summary>
+      <div className="markdown-body prose prose-slate prose-sm mt-3 [&>*:first-child]:mt-0" dangerouslySetInnerHTML={{ __html: html }} />
+    </details>
   );
 }

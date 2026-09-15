@@ -70,6 +70,11 @@ export interface RunDocuments {
 export interface RequirementsJson {
   project_name?: string;
   assumptions?: string[];
+  // Loosely typed — only used for the results-page summary chip counts, never destructured deeper.
+  objectives?: unknown[];
+  functional_requirements?: unknown[];
+  risks?: unknown[];
+  timeline_phases?: unknown[];
   [key: string]: unknown;
 }
 

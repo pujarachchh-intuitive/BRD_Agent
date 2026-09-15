@@ -1,11 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { Sparkles } from "lucide-react";
 import { FORM_SECTIONS, FIELD_DEFS } from "@/lib/formConfig";
 import { CollectedForm, DraftFormState, collectFormData, emptyDraftState, validateRequiredFields } from "@/lib/formLogic";
 import { DraftRepeaterRow } from "@/lib/formLogic";
 import { DEMO_DRAFT } from "@/lib/demoData";
+import { sectionAnchorId } from "@/lib/formSections";
 import FieldRow from "./FieldRow";
+import SectionNav from "./SectionNav";
 
 interface RequestFormProps {
   disabled: boolean;
@@ -71,13 +74,14 @@ export default function RequestForm({ disabled, onSubmit, onValidationError, onC
           rather the AI infer — everything you do fill in is kept exactly as written.
         </p>
         <button type="button" className="btn btn-secondary btn-small whitespace-nowrap" disabled={disabled} onClick={handleFillDemo}>
-          Fill Demo Data
+          <Sparkles size={14} /> Fill Demo Data
         </button>
       </div>
-      <form onSubmit={handleSubmit}>
-        <div className="flex flex-col gap-3">
+      <form onSubmit={handleSubmit} className="form-layout">
+        <SectionNav draft={draft} />
+        <div className="flex flex-col gap-3 min-w-0">
           {FORM_SECTIONS.map((section) => (
-            <details className="form-section" open key={section.title}>
+            <details className="form-section" open key={section.title} id={sectionAnchorId(section.title)}>
               <summary>{section.title}</summary>
               <div className="form-section-body">
                 {section.fields.map((fieldName) => (
@@ -97,11 +101,11 @@ export default function RequestForm({ disabled, onSubmit, onValidationError, onC
               </div>
             </details>
           ))}
-        </div>
-        <div className="mt-6 flex justify-center">
-          <button type="submit" className="btn btn-primary btn-large" disabled={disabled}>
-            Generate Documents
-          </button>
+          <div className="mt-2 flex justify-center">
+            <button type="submit" className="btn btn-primary btn-large" disabled={disabled}>
+              Generate Documents
+            </button>
+          </div>
         </div>
       </form>
     </section>

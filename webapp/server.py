@@ -1,10 +1,9 @@
-"""FastAPI backend for the structured-form UI.
+"""FastAPI backend for the Next.js frontend (frontend/). API-only — no static files served here;
+the frontend (its own dev server or production build) proxies /api/* to this process.
 
 Run from the project root (so `brd_agent_suite` and `webapp` both resolve as top-level packages):
 
     python -m uvicorn webapp.server:app --reload --port 8000
-
-Then open http://127.0.0.1:8000/ in a browser.
 """
 
 from pathlib import Path
@@ -18,14 +17,11 @@ load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env")
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import service
 
-app = FastAPI(title="BRD Agent Suite — Form UI")
-
-STATIC_DIR = Path(__file__).resolve().parent / "static"
+app = FastAPI(title="BRD Agent Suite — API")
 
 
 class GenerateRequest(BaseModel):
@@ -107,7 +103,3 @@ async def export_document(run_id: str, doc: str):
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         filename=out_path.name,
     )
-
-
-# Static frontend last, so /api/* above takes priority over the catch-all.
-app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")

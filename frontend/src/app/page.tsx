@@ -1,166 +1,162 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { FileStack, FilePlus2, FolderOpen, Layers, Search, Sparkles } from "lucide-react";
+import TopBar from "@/components/layout/TopBar";
 import ErrorBanner from "@/components/ErrorBanner";
-import Header from "@/components/Header";
-import LoadingSection from "@/components/LoadingSection";
-import RequestForm from "@/components/form/RequestForm";
-import ResultsView from "@/components/results/ResultsView";
-import { apiGenerate, apiGetRun, apiListRuns, apiRevise } from "@/lib/api";
-import { CollectedForm } from "@/lib/formLogic";
-import { addRunToHistory, loadRunHistory, mergeRunHistory } from "@/lib/runHistory";
-import { RunHistoryEntry, RunResult } from "@/lib/types";
+import { apiListRuns } from "@/lib/api";
+import { BackendRunSummary } from "@/lib/types";
+import { formatRelativeTime, parseRunTimestamp } from "@/lib/runId";
 
-export default function Home() {
-  const [currentData, setCurrentData] = useState<RunResult | null>(null);
-  const [runHistory, setRunHistory] = useState<RunHistoryEntry[]>([]);
+interface DashboardStats {
+  total: number;
+  thisWeek: number;
+  uniqueProjects: number;
+}
+
+export default function DashboardPage() {
+  const [runs, setRuns] = useState<BackendRunSummary[] | null>(null);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [loadingMessage, setLoadingMessage] = useState("");
-  const errorRef = useRef<HTMLDivElement>(null);
-  const resultsRef = useRef<HTMLDivElement>(null);
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
-    refreshRunHistory();
+    let cancelled = false;
+    apiListRuns()
+      .then((data) => {
+        if (cancelled) return;
+        setRuns(data);
+        // "This week" is computed once here (not during render) — Date.now() is impure, and a
+        // component's render body must stay a pure function of props/state.
+        const now = Date.now();
+        const thisWeek = data.filter((r) => {
+          const ts = parseRunTimestamp(r.run_id);
+          return ts && now - ts.getTime() < 7 * 24 * 60 * 60 * 1000;
+        }).length;
+        const uniqueProjects = new Set(data.map((r) => r.project_name || r.run_id)).size;
+        setStats({ total: data.length, thisWeek, uniqueProjects });
+      })
+      .catch((err) => {
+        if (!cancelled) setErrorMessage(err instanceof Error ? err.message : String(err));
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  useEffect(() => {
-    if (errorMessage) errorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [errorMessage]);
-
-  useEffect(() => {
-    if (currentData) resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [currentData]);
-
-  function showError(err: unknown) {
-    setErrorMessage(err instanceof Error ? err.message : String(err));
-  }
-
-  // Persists to localStorage only — the run/revision-parent link never lives on the backend, so
-  // this is just to enrich the authoritative list refreshRunHistory() fetches right after.
-  function recordRunLocally(entry: { run_id: string; project_name?: string | null; parent_run_id?: string | null }) {
-    addRunToHistory(entry);
-  }
-
-  // GET /api/runs is authoritative for "every run that exists" — covers runs made through this
-  // form AND ones made via `adk web`/`adk run` directly, since both write to the same output
-  // directory. Best-effort: if it fails, just leave the dropdown showing whatever it already had.
-  async function refreshRunHistory() {
-    try {
-      const backendRuns = await apiListRuns();
-      setRunHistory(mergeRunHistory(backendRuns, loadRunHistory()));
-    } catch {
-      // best-effort — a failed refresh isn't worth surfacing as an error banner
-    }
-  }
-
-  async function handleGenerate(collected: CollectedForm) {
-    setIsLoading(true);
-    setLoadingMessage("Generating your documents — this usually takes 30-90 seconds...");
-    try {
-      const data = await apiGenerate(collected);
-      recordRunLocally({ run_id: data.run_id, project_name: data.requirements_json.project_name, parent_run_id: null });
-      await refreshRunHistory();
-      setCurrentData(data);
-    } catch (err) {
-      showError(err);
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  async function handleRevise(changeRequest: string): Promise<boolean> {
-    if (!changeRequest) {
-      setErrorMessage("Please describe the change you'd like before applying it.");
-      return false;
-    }
-    if (!currentData) {
-      setErrorMessage("No active run to revise.");
-      return false;
-    }
-    setErrorMessage(null);
-    setIsLoading(true);
-    setLoadingMessage("Applying your change — this usually takes 30-90 seconds...");
-    try {
-      const data = await apiRevise(currentData.run_id, changeRequest);
-      recordRunLocally({ run_id: data.run_id, project_name: data.requirements_json.project_name, parent_run_id: data.parent_run_id });
-      await refreshRunHistory();
-      setCurrentData(data);
-      return true;
-    } catch (err) {
-      showError(err);
-      return false;
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  async function handleSelectRun(runId: string) {
-    setErrorMessage(null);
-    setIsLoading(true);
-    setLoadingMessage("Loading run...");
-    try {
-      const data = await apiGetRun(runId);
-      setCurrentData(data);
-    } catch (err) {
-      showError(err);
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  async function handleLoadRunId(runId: string) {
-    setErrorMessage(null);
-    setIsLoading(true);
-    setLoadingMessage("Loading run...");
-    try {
-      const data = await apiGetRun(runId);
-      setCurrentData(data);
-      // Runs loaded via adk are already in the backend's list — refreshRunHistory() below picks
-      // them up regardless. This local write is just so localStorage has an entry to enrich from.
-      recordRunLocally({ run_id: data.run_id, project_name: data.requirements_json.project_name, parent_run_id: null });
-      await refreshRunHistory();
-    } catch (err) {
-      showError(err);
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  function handleNewRequest() {
-    setCurrentData(null);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
+  const filteredRuns = runs?.filter((r) => {
+    if (!query.trim()) return true;
+    const q = query.toLowerCase();
+    return (r.project_name || "").toLowerCase().includes(q) || r.run_id.toLowerCase().includes(q);
+  });
 
   return (
     <>
-      <Header
-        runHistory={runHistory}
-        currentRunId={currentData?.run_id ?? null}
-        disabled={isLoading}
-        showNewRequest={!!currentData}
-        onSelectRun={handleSelectRun}
-        onLoadRunId={handleLoadRunId}
-        onNewRequest={handleNewRequest}
-      />
+      <TopBar title="Dashboard" />
+      <div className="app-content">
+        <ErrorBanner message={errorMessage} />
 
-      <main className="mx-auto max-w-4xl px-6 py-8 pb-16">
-        <ErrorBanner ref={errorRef} message={errorMessage} />
-        <LoadingSection visible={isLoading} message={loadingMessage} />
+        <section className="hero-panel">
+          <div className="flex flex-wrap items-center justify-between gap-6">
+            <div className="max-w-xl">
+              <h1 className="text-2xl font-bold">Turn a project idea into a full document set</h1>
+              <p className="mt-2 text-sm opacity-90">
+                Describe what you&apos;re building and generate a BRD, TSD, flowchart, architecture diagram, and
+                executive one-pager — consistency-checked, in minutes.
+              </p>
+            </div>
+            <Link href="/new" className="btn btn-primary btn-large">
+              <FilePlus2 size={18} /> New Request
+            </Link>
+          </div>
+        </section>
 
-        {currentData ? (
-          <div ref={resultsRef}>
-            <ResultsView data={currentData} disabled={isLoading} onError={(msg) => setErrorMessage(msg)} onRevise={handleRevise} />
+        <div className="stat-grid mt-6">
+          <div className="stat-tile">
+            <div className="stat-tile-icon">
+              <FileStack size={17} />
+            </div>
+            <div className="stat-tile-value">{stats ? stats.total : <span className="skeleton inline-block h-8 w-12 align-middle" />}</div>
+            <div className="stat-tile-label">Total runs</div>
+          </div>
+          <div className="stat-tile">
+            <div className="stat-tile-icon">
+              <Sparkles size={17} />
+            </div>
+            <div className="stat-tile-value">{stats ? stats.thisWeek : <span className="skeleton inline-block h-8 w-12 align-middle" />}</div>
+            <div className="stat-tile-label">Generated this week</div>
+          </div>
+          <div className="stat-tile">
+            <div className="stat-tile-icon">
+              <Layers size={17} />
+            </div>
+            <div className="stat-tile-value">{stats ? stats.uniqueProjects : <span className="skeleton inline-block h-8 w-12 align-middle" />}</div>
+            <div className="stat-tile-label">Unique projects</div>
+          </div>
+        </div>
+
+        <div className="section-heading">
+          <h2>Recent runs</h2>
+          {runs && runs.length > 0 && (
+            <div className="relative">
+              <Search size={15} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2" style={{ color: "var(--color-text-muted)" }} />
+              <input
+                type="text"
+                className="field-input py-1.5 pl-8 text-sm"
+                style={{ width: 220 }}
+                placeholder="Search runs..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </div>
+          )}
+        </div>
+
+        {!runs ? (
+          <div className="run-list">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="skeleton" style={{ height: 62 }} />
+            ))}
+          </div>
+        ) : filteredRuns && filteredRuns.length > 0 ? (
+          <div className="run-list">
+            {filteredRuns.map((run) => {
+              const ts = parseRunTimestamp(run.run_id);
+              return (
+                <Link key={run.run_id} href={`/runs/${run.run_id}`} className="run-card">
+                  <div className="run-card-main">
+                    <div className="run-card-icon">
+                      <FolderOpen size={17} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="run-card-title">{run.project_name || run.run_id}</div>
+                      <div className="run-card-meta">{run.run_id}</div>
+                    </div>
+                  </div>
+                  <span className="chip chip-neutral whitespace-nowrap">{formatRelativeTime(ts)}</span>
+                </Link>
+              );
+            })}
+          </div>
+        ) : runs.length === 0 ? (
+          <div className="card empty-state">
+            <div className="empty-state-icon">
+              <Sparkles size={22} />
+            </div>
+            <p className="mb-4 font-medium" style={{ color: "var(--color-text)" }}>
+              No runs yet — generate your first document set to see it here.
+            </p>
+            <Link href="/new" className="btn btn-primary">
+              <FilePlus2 size={16} /> New Request
+            </Link>
           </div>
         ) : (
-          <RequestForm
-            disabled={isLoading}
-            onSubmit={handleGenerate}
-            onValidationError={(msg) => setErrorMessage(msg)}
-            onClearError={() => setErrorMessage(null)}
-          />
+          <div className="card empty-state">
+            <p>No runs match &quot;{query}&quot;.</p>
+          </div>
         )}
-      </main>
+      </div>
     </>
   );
 }
