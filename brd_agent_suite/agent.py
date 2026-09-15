@@ -1,6 +1,7 @@
 from google.adk.agents import LlmAgent
 
 from .config import MODEL_NAME
+from .observability import log_after_model_call, log_before_model_call, log_model_error_call
 from .prompts.root_prompt import ROOT_INSTRUCTION
 from .tools import generate_all_documents
 
@@ -14,4 +15,7 @@ root_agent = LlmAgent(
     ),
     instruction=ROOT_INSTRUCTION,
     tools=[generate_all_documents],
+    before_model_callback=log_before_model_call,
+    after_model_callback=log_after_model_call,
+    on_model_error_callback=log_model_error_call,
 )

@@ -69,6 +69,11 @@ async def revise(run_id: str, req: ReviseRequest):
     return result
 
 
+@app.get("/api/runs")
+async def list_runs():
+    return {"runs": service.list_runs()}
+
+
 @app.get("/api/runs/{run_id}")
 async def get_run(run_id: str):
     result = service.load_run(run_id)

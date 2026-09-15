@@ -1,0 +1,487 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+:root {
+  --color-bg: #f6f7fb;
+  --color-surface: #ffffff;
+  --color-border: #e3e7ee;
+  --color-text: #161b26;
+  --color-text-muted: #667085;
+  --color-primary: #3452e1;
+  --color-primary-dark: #263ea8;
+  --color-primary-soft: #eef1fe;
+  --color-primary-contrast: #ffffff;
+  --color-accent: #4c6ef5;
+  --color-success-bg: #ecfdf3;
+  --color-success-border: #abe6c4;
+  --color-success-text: #157347;
+  --color-warn-bg: #fff8e6;
+  --color-warn-border: #f2d38a;
+  --color-warn-text: #92670c;
+  --color-error-bg: #fef2f2;
+  --color-error-border: #f5b8b8;
+  --color-error-text: #b42323;
+  --radius: 10px;
+  --shadow-sm: 0 1px 2px rgba(20, 24, 40, 0.05);
+  --shadow-md: 0 8px 24px rgba(20, 24, 40, 0.08);
+}
+
+@theme inline {
+  --color-background: var(--color-bg);
+  --color-foreground: var(--color-text);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+body {
+  font-family: var(--font-sans), "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
+  line-height: 1.55;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-weight: 600;
+  color: var(--color-primary-dark);
+  margin: 0 0 0.5em;
+}
+
+/* ---------- Buttons ---------- */
+
+.btn {
+  font: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  padding: 0.55rem 1.15rem;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.92rem;
+  transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease, transform 0.1s ease;
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.btn-primary {
+  background: var(--color-primary);
+  color: var(--color-primary-contrast);
+  box-shadow: 0 1px 2px rgba(52, 82, 225, 0.25);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--color-primary-dark);
+}
+
+.btn-secondary {
+  background: var(--color-surface);
+  color: var(--color-primary-dark);
+  border-color: var(--color-border);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.btn-large {
+  padding: 0.8rem 2rem;
+  font-size: 1.05rem;
+  border-radius: calc(var(--radius) + 2px);
+}
+
+.btn-small {
+  padding: 0.32rem 0.75rem;
+  font-size: 0.82rem;
+}
+
+.btn-remove {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-error-text);
+  border-radius: 50%;
+  width: 1.9rem;
+  height: 1.9rem;
+  line-height: 1;
+  cursor: pointer;
+  font-size: 1rem;
+  align-self: center;
+  flex-shrink: 0;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.btn-remove:hover {
+  background: var(--color-error-bg);
+  border-color: var(--color-error-border);
+}
+
+/* ---------- Inputs ---------- */
+
+.field-input {
+  font: inherit;
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.field-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-primary-soft);
+}
+
+.field-input:disabled {
+  background: #f1f2f6;
+  color: var(--color-text-muted);
+}
+
+textarea.field-input {
+  resize: vertical;
+}
+
+/* ---------- Panels & cards ---------- */
+
+.panel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: calc(var(--radius) + 4px);
+  padding: 1.2rem 1.4rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.panel h2 {
+  font-size: 1.05rem;
+  margin-bottom: 0.6rem;
+}
+
+/* ---------- Form ---------- */
+
+.form-section {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: calc(var(--radius) + 4px);
+  box-shadow: var(--shadow-sm);
+}
+
+.form-section > summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 0.9rem 1.2rem;
+  color: var(--color-primary-dark);
+  list-style: none;
+  display: flex;
+  align-items: center;
+  border-radius: calc(var(--radius) + 4px);
+}
+
+.form-section > summary::-webkit-details-marker {
+  display: none;
+}
+
+.form-section > summary::marker {
+  content: "";
+}
+
+.form-section > summary::before {
+  content: "";
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 4px 0 4px 6px;
+  border-color: transparent transparent transparent var(--color-accent);
+  display: inline-block;
+  margin-right: 0.65rem;
+  transition: transform 0.15s ease;
+}
+
+.form-section[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.form-section-body {
+  padding: 0 1.2rem 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+.field {
+  border-top: 1px solid var(--color-border);
+  padding-top: 1rem;
+}
+
+.form-section-body > .field:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.field.is-auto {
+  background: var(--color-primary-soft);
+  border-left: 3px solid var(--color-accent);
+  padding-left: 0.7rem;
+  margin-left: -0.7rem;
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+.field.is-excluded {
+  opacity: 0.5;
+}
+
+.field.is-excluded input,
+.field.is-excluded textarea,
+.field.is-excluded select {
+  text-decoration: line-through;
+}
+
+.field-prominent {
+  border-top: none;
+  background: var(--color-primary-soft);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 1.1rem;
+}
+
+.field-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.field-header .field-label {
+  font-weight: 600;
+  color: var(--color-text);
+  font-size: 0.94rem;
+}
+
+.field-toggles {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+}
+
+.auto-toggle,
+.exclude-toggle {
+  font-size: 0.83rem;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.exclude-toggle {
+  color: var(--color-warn-text);
+}
+
+.field-helper {
+  font-size: 0.83rem;
+  color: var(--color-text-muted);
+  margin: 0 0 0.45rem;
+}
+
+.repeater-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-bottom: 0.65rem;
+}
+
+.repeater-row {
+  display: flex;
+  gap: 0.65rem;
+  align-items: flex-end;
+  background: #f8fafc;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 0.65rem;
+}
+
+.repeater-cell {
+  flex: 1;
+  min-width: 0;
+}
+
+.repeater-cell label {
+  display: block;
+  font-size: 0.76rem;
+  color: var(--color-text-muted);
+  margin-bottom: 0.25rem;
+}
+
+/* ---------- Tabs ---------- */
+
+.tabs {
+  display: flex;
+  gap: 0.4rem;
+  border-bottom: 2px solid var(--color-border);
+  flex-wrap: wrap;
+}
+
+.tab-btn {
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.92rem;
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  padding: 0.65rem 1rem;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  transition: color 0.15s ease;
+}
+
+.tab-btn:hover {
+  color: var(--color-primary);
+}
+
+.tab-btn.active {
+  color: var(--color-primary-dark);
+  border-bottom-color: var(--color-primary);
+}
+
+.tab-panels {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-top: none;
+  border-radius: 0 0 calc(var(--radius) + 4px) calc(var(--radius) + 4px);
+  box-shadow: var(--shadow-sm);
+}
+
+.tab-panel {
+  display: none;
+  padding: 1.4rem;
+}
+
+.tab-panel.active {
+  display: block;
+}
+
+.doc-toolbar {
+  display: flex;
+  gap: 0.6rem;
+  margin-bottom: 1.1rem;
+  flex-wrap: wrap;
+}
+
+.doc-scroll {
+  overflow-x: auto;
+}
+
+.doc-empty {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.diagram-holder {
+  overflow-x: auto;
+  text-align: center;
+  padding: 0.5rem;
+}
+
+.diagram-holder svg,
+.inline-diagram svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.inline-diagram {
+  margin: 1.75rem 0;
+  text-align: center;
+}
+
+.inline-diagram figcaption {
+  font-size: 0.83rem;
+  color: var(--color-text-muted);
+  margin-top: 0.45rem;
+}
+
+/* ---------- Markdown document rendering (Tailwind Typography, lightly themed) ---------- */
+
+.markdown-body {
+  max-width: none;
+  --tw-prose-headings: var(--color-primary-dark);
+  --tw-prose-links: var(--color-primary);
+  --tw-prose-bold: var(--color-text);
+  --tw-prose-quote-borders: var(--color-accent);
+  --tw-prose-th-borders: var(--color-border);
+  --tw-prose-td-borders: var(--color-border);
+}
+
+.markdown-body :first-child {
+  margin-top: 0;
+}
+
+/* ---------- Revise panel ---------- */
+
+.revise-panel textarea {
+  margin-bottom: 0.85rem;
+}
+
+/* ---------- Print / PDF view ---------- */
+
+.print-root {
+  display: none;
+}
+
+.print-title {
+  display: none;
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  #print-root,
+  #print-root * {
+    visibility: visible;
+  }
+
+  #print-root {
+    display: block;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 0;
+    margin: 0;
+  }
+
+  .print-title {
+    display: block;
+    font-size: 1.6rem;
+    margin-bottom: 0.5em;
+  }
+
+  .doc-toolbar {
+    display: none;
+  }
+}

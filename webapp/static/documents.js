@@ -14,6 +14,57 @@ function nextMermaidId(prefix) {
   return `${prefix}-${Date.now()}-${_mermaidUidCounter}`;
 }
 
+/* ---------- Label word-wrapping ----------
+ * Mermaid only auto-wraps a label onto multiple lines when it uses the special markdown-string
+ * syntax (`id["`backtick-quoted text`"]`) — the generator prompts emit plain `id[Text]` / `id{Text}`
+ * labels, so long labels were rendering as one unwrapped line and getting clipped at the node's
+ * edge. Inserting literal <br/> tags works regardless of label syntax as long as htmlLabels is on
+ * (set in app.js), and Mermaid sizes each node box to fit the wrapped lines.
+ */
+const LABEL_WRAP_MAX_CHARS = 18;
+
+function wrapLabelText(text) {
+  const words = text.trim().split(/\s+/);
+  const lines = [];
+  let current = "";
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (current && candidate.length > LABEL_WRAP_MAX_CHARS) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current) lines.push(current);
+  return lines.join("<br/>");
+}
+
+function wrapBracketLabels(source, open, close) {
+  const esc = (c) => c.replace(/[[\]{}]/g, "\\$&");
+  const pattern = new RegExp(`${esc(open)}([^${esc(open)}${esc(close)}]+)${esc(close)}`, "g");
+  return source.replace(pattern, (match, inner) => {
+    if (/<br\s*\/?>/i.test(inner)) return match;
+    return `${open}${wrapLabelText(inner)}${close}`;
+  });
+}
+
+function wrapEdgeLabels(source) {
+  return source.replace(/(--\s+)(.+?)(\s+-->)/g, (match, pre, label, post) => {
+    if (/<br\s*\/?>/i.test(label)) return match;
+    return `${pre}${wrapLabelText(label)}${post}`;
+  });
+}
+
+function wrapMermaidLabels(source) {
+  if (!source) return source;
+  let out = source;
+  out = wrapBracketLabels(out, "[", "]");
+  out = wrapBracketLabels(out, "{", "}");
+  out = wrapEdgeLabels(out);
+  return out;
+}
+
 const DOC_TAB_CONFIG = [
   { key: "brd", title: "BRD", exportDoc: "brd", filename: "BRD.docx", diagrams: ["flowchart", "architecture"] },
   { key: "tsd", title: "TSD", exportDoc: "tsd", filename: "TSD.docx", diagrams: ["architecture", "flowchart"] },
@@ -79,8 +130,8 @@ async function renderAllTabs(data) {
   state.diagramSvg = {};
 
   const mermaidSrcs = {
-    architecture: data.documents.architecture_mermaid,
-    flowchart: data.documents.flowchart_mermaid,
+    architecture: wrapMermaidLabels(data.documents.architecture_mermaid),
+    flowchart: wrapMermaidLabels(data.documents.flowchart_mermaid),
   };
 
   for (const cfg of DOC_TAB_CONFIG) {

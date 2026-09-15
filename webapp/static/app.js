@@ -504,6 +504,25 @@ function wireEvents() {
     }
   });
 
+  document.getElementById("load-run-id-btn").addEventListener("click", async () => {
+    const input = document.getElementById("load-run-id");
+    const runId = input.value.trim();
+    if (!runId) return;
+    clearError();
+    setLoading(true, "Loading run...");
+    try {
+      const data = await apiGetRun(runId);
+      await renderResults(data);
+      // So a run produced by `adk web` (or typed once) shows up in the dropdown on future visits too.
+      addRunToHistory({ run_id: data.run_id, project_name: data.requirements_json.project_name, parent_run_id: null });
+      input.value = "";
+    } catch (err) {
+      showError(err.message || String(err));
+    } finally {
+      setLoading(false);
+    }
+  });
+
   document.getElementById("new-request-btn").addEventListener("click", resetToForm);
 
   document.getElementById("doc-tabs").addEventListener("click", (event) => {
@@ -516,7 +535,20 @@ function wireEvents() {
 /* ---------- Init ---------- */
 
 document.addEventListener("DOMContentLoaded", () => {
-  window.mermaid.initialize({ startOnLoad: false, theme: "default" });
+  window.mermaid.initialize({
+    startOnLoad: false,
+    theme: "default",
+    // Default securityLevel ("strict") forces plain, non-wrapping SVG <text> labels, which is why
+    // long node labels (e.g. "Conduct Discovery & Questions") were getting clipped at the node's
+    // right edge instead of wrapping onto a second line. "loose" allows htmlLabels, which renders
+    // labels as wrapped HTML inside a foreignObject sized to fit the wrapped text.
+    securityLevel: "loose",
+    flowchart: {
+      htmlLabels: true,
+      useMaxWidth: true,
+      wrappingWidth: 180,
+    },
+  });
   buildForm();
   populateRunHistoryDropdown();
   wireEvents();

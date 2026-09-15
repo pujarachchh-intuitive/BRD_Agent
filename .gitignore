@@ -3,4 +3,5 @@
 __pycache__/
 *.pyc
 brd_agent_suite/output/
+brd_agent_suite/logs/
 .claude/

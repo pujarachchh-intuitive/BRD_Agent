@@ -147,6 +147,27 @@ async def revise_run(run_id: str, change_request: str) -> dict:
     return result
 
 
+def list_runs() -> list[dict]:
+    """Every run that has ever been written to OUTPUT_ROOT — regardless of whether it came from
+    this webapp's form or from `adk web`/`adk run` directly, since both write to the same directory
+    via run_pipeline_and_write. Newest first (run_id is a sortable UTC timestamp prefix)."""
+    if not OUTPUT_ROOT.exists():
+        return []
+    runs = []
+    for run_dir in OUTPUT_ROOT.iterdir():
+        req_path = run_dir / "requirements.json"
+        if not run_dir.is_dir() or not req_path.exists():
+            continue
+        project_name = None
+        try:
+            project_name = json.loads(req_path.read_text(encoding="utf-8")).get("project_name") or None
+        except (json.JSONDecodeError, OSError):
+            pass
+        runs.append({"run_id": run_dir.name, "project_name": project_name})
+    runs.sort(key=lambda r: r["run_id"], reverse=True)
+    return runs
+
+
 def load_run(run_id: str) -> Optional[dict]:
     run_dir = OUTPUT_ROOT / run_id
     req_path = run_dir / "requirements.json"
