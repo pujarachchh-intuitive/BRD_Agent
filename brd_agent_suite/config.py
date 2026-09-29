@@ -21,3 +21,10 @@ ENVIRONMENT = os.getenv("APP_ENV", "development")
 MODEL_PRICING_PER_1M_TOKENS: dict[str, dict[str, float]] = {
     "gemini-3.7-flash": {"input": 0.75, "output": 3.75},
 }
+
+
+def gemini_api_key_configured() -> bool:
+    """True if the Gemini client has a key to read (GOOGLE_API_KEY, this app's canonical
+    variable, or GEMINI_API_KEY as a fallback — google.genai._api_client resolves both the same
+    way). Never returns or logs the key itself — see webapp/server.py's startup check."""
+    return bool(os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY"))

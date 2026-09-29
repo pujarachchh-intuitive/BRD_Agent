@@ -5,3 +5,4 @@ __pycache__/
 brd_agent_suite/output/
 brd_agent_suite/logs/
 .claude/
+.databricks_downloads/

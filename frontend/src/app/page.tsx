@@ -2,24 +2,43 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { FileStack, FilePlus2, FolderOpen, Layers, Search, Sparkles } from "lucide-react";
+import { CheckCircle2, Clock, DollarSign, FileStack, FilePlus2, Files, History, Layers, Sparkles } from "lucide-react";
 import TopBar from "@/components/layout/TopBar";
 import ErrorBanner from "@/components/ErrorBanner";
+import RunCard from "@/components/RunCard";
+import CostByAgentChart from "@/components/dashboard/CostByAgentChart";
+import CostOverTimeChart from "@/components/dashboard/CostOverTimeChart";
+import ConsistencyMeter from "@/components/dashboard/ConsistencyMeter";
+import RunsPerDayChart from "@/components/dashboard/RunsPerDayChart";
 import { apiListRuns } from "@/lib/api";
+import {
+  AgentCost,
+  ConsistencyStats,
+  DashboardStats,
+  DayCount,
+  DayValue,
+  computeConsistencyStats,
+  computeCostByAgent,
+  computeCostOverTime,
+  computeDashboardStats,
+  computeRunsPerDay,
+  formatCost,
+  formatDuration,
+} from "@/lib/dashboardStats";
 import { BackendRunSummary } from "@/lib/types";
-import { formatRelativeTime, parseRunTimestamp } from "@/lib/runId";
 
-interface DashboardStats {
-  total: number;
-  thisWeek: number;
-  uniqueProjects: number;
+interface DashboardData {
+  stats: DashboardStats;
+  runsPerDay: DayCount[];
+  costOverTime: DayValue[];
+  costByAgent: AgentCost[];
+  consistency: ConsistencyStats;
 }
 
 export default function DashboardPage() {
   const [runs, setRuns] = useState<BackendRunSummary[] | null>(null);
-  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -27,15 +46,16 @@ export default function DashboardPage() {
       .then((data) => {
         if (cancelled) return;
         setRuns(data);
-        // "This week" is computed once here (not during render) — Date.now() is impure, and a
-        // component's render body must stay a pure function of props/state.
+        // Computed once here (not during render) — Date.now() is impure, and a component's render
+        // body must stay a pure function of props/state.
         const now = Date.now();
-        const thisWeek = data.filter((r) => {
-          const ts = parseRunTimestamp(r.run_id);
-          return ts && now - ts.getTime() < 7 * 24 * 60 * 60 * 1000;
-        }).length;
-        const uniqueProjects = new Set(data.map((r) => r.project_name || r.run_id)).size;
-        setStats({ total: data.length, thisWeek, uniqueProjects });
+        setDashboardData({
+          stats: computeDashboardStats(data, now),
+          runsPerDay: computeRunsPerDay(data, now),
+          costOverTime: computeCostOverTime(data, now),
+          costByAgent: computeCostByAgent(data),
+          consistency: computeConsistencyStats(data),
+        });
       })
       .catch((err) => {
         if (!cancelled) setErrorMessage(err instanceof Error ? err.message : String(err));
@@ -45,11 +65,7 @@ export default function DashboardPage() {
     };
   }, []);
 
-  const filteredRuns = runs?.filter((r) => {
-    if (!query.trim()) return true;
-    const q = query.toLowerCase();
-    return (r.project_name || "").toLowerCase().includes(q) || r.run_id.toLowerCase().includes(q);
-  });
+  const stats = dashboardData?.stats;
 
   return (
     <>
@@ -89,27 +105,133 @@ export default function DashboardPage() {
           </div>
           <div className="stat-tile">
             <div className="stat-tile-icon">
+              <Clock size={17} />
+            </div>
+            <div className="stat-tile-value">
+              {!stats ? (
+                <span className="skeleton inline-block h-8 w-12 align-middle" />
+              ) : stats.avgDurationSeconds != null ? (
+                formatDuration(stats.avgDurationSeconds)
+              ) : (
+                <span className="text-xl" style={{ color: "var(--color-text-muted)" }}>
+                  —
+                </span>
+              )}
+            </div>
+            <div className="stat-tile-label">Avg generation time</div>
+          </div>
+          <div className="stat-tile">
+            <div className="stat-tile-icon">
+              <DollarSign size={17} />
+            </div>
+            <div className="stat-tile-value">
+              {!stats ? (
+                <span className="skeleton inline-block h-8 w-12 align-middle" />
+              ) : stats.totalCostUsd != null ? (
+                formatCost(stats.totalCostUsd)
+              ) : (
+                <span className="text-xl" style={{ color: "var(--color-text-muted)" }}>
+                  —
+                </span>
+              )}
+            </div>
+            <div className="stat-tile-label">Total est. AI cost</div>
+          </div>
+          <div className="stat-tile">
+            <div className="stat-tile-icon">
               <Layers size={17} />
             </div>
             <div className="stat-tile-value">{stats ? stats.uniqueProjects : <span className="skeleton inline-block h-8 w-12 align-middle" />}</div>
             <div className="stat-tile-label">Unique projects</div>
+          </div>
+          <div className="stat-tile">
+            <div className="stat-tile-icon">
+              <Files size={17} />
+            </div>
+            <div className="stat-tile-value">
+              {stats ? stats.documentsGenerated : <span className="skeleton inline-block h-8 w-12 align-middle" />}
+            </div>
+            <div className="stat-tile-label">Documents generated</div>
+          </div>
+          <div className="stat-tile">
+            <div className="stat-tile-icon">
+              <CheckCircle2 size={17} />
+            </div>
+            <div className="stat-tile-value">
+              {!dashboardData ? (
+                <span className="skeleton inline-block h-8 w-12 align-middle" />
+              ) : dashboardData.consistency.rate != null ? (
+                `${Math.round(dashboardData.consistency.rate * 100)}%`
+              ) : (
+                <span className="text-xl" style={{ color: "var(--color-text-muted)" }}>
+                  —
+                </span>
+              )}
+            </div>
+            <div className="stat-tile-label">Consistency pass rate</div>
+          </div>
+        </div>
+
+        <div className="section-heading">
+          <h2>Activity</h2>
+        </div>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="card p-5">
+            <h3 className="mb-1 text-sm font-semibold" style={{ color: "var(--color-text)" }}>
+              Runs per day
+            </h3>
+            <p className="mb-3 text-xs" style={{ color: "var(--color-text-muted)" }}>
+              Last 14 days
+            </p>
+            {dashboardData ? (
+              <RunsPerDayChart data={dashboardData.runsPerDay} />
+            ) : (
+              <div className="skeleton" style={{ height: 180 }} />
+            )}
+          </div>
+          <div className="card p-5">
+            <h3 className="mb-1 text-sm font-semibold" style={{ color: "var(--color-text)" }}>
+              Estimated cost by agent
+            </h3>
+            <p className="mb-3 text-xs" style={{ color: "var(--color-text-muted)" }}>
+              Where generation spend goes, across all logged runs
+            </p>
+            {!dashboardData ? (
+              <div className="skeleton" style={{ height: 180 }} />
+            ) : dashboardData.costByAgent.length > 0 ? (
+              <CostByAgentChart data={dashboardData.costByAgent} />
+            ) : (
+              <p className="py-10 text-center text-sm" style={{ color: "var(--color-text-muted)" }}>
+                No cost data yet — this appears once a run has been generated with usage logging enabled.
+              </p>
+            )}
+          </div>
+          <div className="card p-5">
+            <h3 className="mb-1 text-sm font-semibold" style={{ color: "var(--color-text)" }}>
+              Estimated cost per day
+            </h3>
+            <p className="mb-3 text-xs" style={{ color: "var(--color-text-muted)" }}>
+              Last 14 days
+            </p>
+            {dashboardData ? <CostOverTimeChart data={dashboardData.costOverTime} /> : <div className="skeleton" style={{ height: 180 }} />}
+          </div>
+          <div className="card p-5">
+            <h3 className="mb-1 text-sm font-semibold" style={{ color: "var(--color-text)" }}>
+              Consistency check pass rate
+            </h3>
+            <p className="mb-3 text-xs" style={{ color: "var(--color-text-muted)" }}>
+              Cross-document contradiction check, every run
+            </p>
+            {dashboardData ? <ConsistencyMeter stats={dashboardData.consistency} /> : <div className="skeleton" style={{ height: 60 }} />}
           </div>
         </div>
 
         <div className="section-heading">
           <h2>Recent runs</h2>
           {runs && runs.length > 0 && (
-            <div className="relative">
-              <Search size={15} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2" style={{ color: "var(--color-text-muted)" }} />
-              <input
-                type="text"
-                className="field-input py-1.5 pl-8 text-sm"
-                style={{ width: 220 }}
-                placeholder="Search runs..."
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-            </div>
+            <Link href="/history" className="btn btn-ghost btn-small">
+              View all history <History size={14} />
+            </Link>
           )}
         </div>
 
@@ -119,27 +241,13 @@ export default function DashboardPage() {
               <div key={i} className="skeleton" style={{ height: 62 }} />
             ))}
           </div>
-        ) : filteredRuns && filteredRuns.length > 0 ? (
+        ) : runs.length > 0 ? (
           <div className="run-list">
-            {filteredRuns.map((run) => {
-              const ts = parseRunTimestamp(run.run_id);
-              return (
-                <Link key={run.run_id} href={`/runs/${run.run_id}`} className="run-card">
-                  <div className="run-card-main">
-                    <div className="run-card-icon">
-                      <FolderOpen size={17} />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="run-card-title">{run.project_name || run.run_id}</div>
-                      <div className="run-card-meta">{run.run_id}</div>
-                    </div>
-                  </div>
-                  <span className="chip chip-neutral whitespace-nowrap">{formatRelativeTime(ts)}</span>
-                </Link>
-              );
-            })}
+            {runs.slice(0, 6).map((run) => (
+              <RunCard key={run.run_id} run={run} />
+            ))}
           </div>
-        ) : runs.length === 0 ? (
+        ) : (
           <div className="card empty-state">
             <div className="empty-state-icon">
               <Sparkles size={22} />
@@ -150,10 +258,6 @@ export default function DashboardPage() {
             <Link href="/new" className="btn btn-primary">
               <FilePlus2 size={16} /> New Request
             </Link>
-          </div>
-        ) : (
-          <div className="card empty-state">
-            <p>No runs match &quot;{query}&quot;.</p>
           </div>
         )}
       </div>

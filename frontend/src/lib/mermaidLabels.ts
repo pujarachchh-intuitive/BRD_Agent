@@ -39,9 +39,28 @@ function wrapEdgeLabels(source: string): string {
   });
 }
 
+// Mermaid's flowchart parser treats ( ) [ ] { } inside a `|pipe-delimited|` edge label as the start
+// of a node-shape token (not literal text — confirmed by reproducing the parser's own "Expecting
+// ... got 'PS'/'SQS'" error), so a generated label like "Cache Hit / Miss (Hash Key)" throws a hard
+// parse error and the whole diagram fails to render. Node labels (inside a node's own [ ]/( )/{{ }}
+// shape) don't have this restriction — only pipe-delimited edge labels do. Stripped rather than
+// escaped/quoted: quoting a pipe label does not avoid the same parser error (verified directly
+// against the mermaid.js parser), so removal is the only fix short of the model never emitting these
+// characters (the generator prompts now also say not to, but this covers already-generated runs and
+// any future model drift).
+const EDGE_LABEL_UNSAFE_CHARS = /[()[\]{}]/g;
+
+function sanitizePipeEdgeLabels(source: string): string {
+  return source.replace(/\|([^|\n]*)\|/g, (match, label: string) => {
+    const cleaned = label.replace(EDGE_LABEL_UNSAFE_CHARS, "");
+    return cleaned === label ? match : `|${cleaned}|`;
+  });
+}
+
 export function wrapMermaidLabels(source: string | null | undefined): string {
   if (!source) return "";
   let out = source;
+  out = sanitizePipeEdgeLabels(out);
   out = wrapBracketLabels(out, "[", "]");
   out = wrapBracketLabels(out, "{", "}");
   out = wrapEdgeLabels(out);

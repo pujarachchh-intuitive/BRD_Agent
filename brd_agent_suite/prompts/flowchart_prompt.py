@@ -23,6 +23,10 @@ Output requirements:
 - Label every edge coming out of a decision node with the condition it represents.
 - Include a short comment line (using Mermaid's %% comment syntax) at the top naming which
   data_flow_steps entries the diagram covers.
+- Edge labels (the text between `|pipes|` on a `-->|label|` connection, including Yes/No branch
+  labels) must never contain parentheses or brackets ( ) [ ] { } — Mermaid's parser fails on these
+  inside a pipe-delimited edge label. Rephrase instead. Node labels (inside a node's own shape
+  delimiters) do not have this restriction.
 - Output ONLY the Mermaid code block content — the raw diagram source, starting with the diagram type
   declaration. Do not wrap it in markdown triple-backtick fences and do not add prose before or after it;
   the fences are added by the system that embeds this output into the final documents.

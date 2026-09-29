@@ -1,0 +1,15 @@
+# Secrets are injected as Container Apps secrets at runtime — never bake .env into the image.
+.env
+.venv/
+.git/
+.claude/
+.pytest_cache/
+.databricks_downloads/
+**/__pycache__/
+*.pyc
+brd_agent_suite/output/
+brd_agent_suite/logs/
+frontend/
+tests/
+*.pdf
+*.docx

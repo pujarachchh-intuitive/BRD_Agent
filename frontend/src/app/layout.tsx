@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import Sidebar from "@/components/layout/Sidebar";
+import AppShell from "@/components/layout/AppShell";
+import { AuthProvider } from "@/lib/AuthContext";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -25,10 +26,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     // real DOM difference, but not one our code causes or can avoid — only silence it here.
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} antialiased`} suppressHydrationWarning>
       <body>
-        <div className="app-shell">
-          <Sidebar />
-          <div className="app-main">{children}</div>
-        </div>
+        <AuthProvider>
+          <AppShell>{children}</AppShell>
+        </AuthProvider>
       </body>
     </html>
   );

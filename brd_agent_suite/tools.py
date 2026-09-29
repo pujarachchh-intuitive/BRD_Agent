@@ -10,6 +10,7 @@ differently (a partial form / an existing requirements object) instead of a free
 """
 
 import json
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -41,6 +42,37 @@ def new_run_id() -> str:
     return f"{datetime.now(timezone.utc):%Y%m%d-%H%M%S}-{uuid.uuid4().hex[:6]}"
 
 
+def _iso_now() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
+
+def write_run_meta(
+    run_dir: Path,
+    started_at: str,
+    finished_at: str,
+    duration_seconds: float,
+    parent_run_id: Optional[str] = None,
+) -> None:
+    """run_meta.json: wall-clock time for the whole pipeline run (session creation through the
+    last document being written) — the dashboard's "generation time" KPI reads this. Separate from
+    observability.py's per-LLM-call logs (logs/<run_id>.jsonl), which only cover model latency, not
+    the non-LLM work (session setup, writing files) around it.
+
+    parent_run_id is the run this one was a "request a change" revision of, if any — the only place
+    that relationship is persisted (webapp/service.py.revise_run passes it through), since a
+    revision's own session/state carries no memory of where it came from. This is what lets the
+    History view group a run and its revisions together instead of listing every revision as an
+    unrelated top-level run."""
+    run_dir.mkdir(parents=True, exist_ok=True)
+    meta = {
+        "started_at": started_at,
+        "finished_at": finished_at,
+        "duration_seconds": duration_seconds,
+        "parent_run_id": parent_run_id,
+    }
+    (run_dir / "run_meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
+
+
 def write_state_outputs(run_dir: Path, state: dict) -> tuple[dict[str, str], list[str]]:
     """Writes whichever of OUTPUT_FILES are present in state to run_dir. Returns (written, missing)."""
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -66,6 +98,7 @@ async def run_pipeline_and_write(
     *,
     message_text: Optional[str] = None,
     initial_state: Optional[dict[str, Any]] = None,
+    parent_run_id: Optional[str] = None,
 ) -> dict:
     """Runs pipeline_agent to completion in its own session and writes its outputs to OUTPUT_ROOT/run_id.
 
@@ -78,12 +111,16 @@ async def run_pipeline_and_write(
         initial_state: If given, seeded directly into the session's state before running (what
             gap_filler_agent and revision_agent read their {partial_requirements_json} /
             {requirements_json} template variables from).
+        parent_run_id: If this run is a "request a change" revision of an earlier run, that run's
+            id — persisted to run_meta.json so the run history can be shown as a hierarchy.
 
     Returns:
         A dict with run_id, output_dir, files (state key -> written path), missing (state keys with
-        no value produced), and the consistency_report text.
+        no value produced), duration_seconds, parent_run_id, and the consistency_report text.
     """
     run_dir = OUTPUT_ROOT / run_id
+    started_at = _iso_now()
+    started_monotonic = time.monotonic()
 
     session_service = InMemorySessionService()
     user_id = "brd_agent_user"
@@ -103,11 +140,17 @@ async def run_pipeline_and_write(
 
     written_files, missing = write_state_outputs(run_dir, state)
 
+    finished_at = _iso_now()
+    duration_seconds = round(time.monotonic() - started_monotonic, 2)
+    write_run_meta(run_dir, started_at, finished_at, duration_seconds, parent_run_id)
+
     return {
         "run_id": run_id,
         "output_dir": str(run_dir),
         "files": written_files,
         "missing": missing,
+        "duration_seconds": duration_seconds,
+        "parent_run_id": parent_run_id,
         "requirements_json": state.get("requirements_json"),
         "documents": {
             "brd_markdown": state.get("brd_markdown"),

@@ -26,6 +26,10 @@ Output requirements:
   labeled accordingly, or a distinct node style.
 - Include a short comment line (Mermaid %% syntax) at the top naming the architectural pattern this
   reflects (e.g. pipeline, layered, adapter/plugin).
+- Edge labels (the text between `|pipes|` on a `-->|label|` connection) must never contain
+  parentheses or brackets ( ) [ ] { } — Mermaid's parser fails on these inside a pipe-delimited edge
+  label. Rephrase instead, e.g. "Cache Hit or Miss by Hash Key" rather than "Cache Hit / Miss (Hash
+  Key)". Node labels (inside a node's own [ ], ( ), or {{ }} shape) do not have this restriction.
 - Output ONLY the Mermaid code block content — the raw diagram source, starting with the diagram type
   declaration. Do not wrap it in markdown triple-backtick fences and do not add prose before or after it;
   the fences are added by the system that embeds this output into the final documents.
