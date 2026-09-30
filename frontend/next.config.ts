@@ -6,6 +6,10 @@ import type { NextConfig } from "next";
 const BACKEND_URL = process.env.BACKEND_URL || "http://127.0.0.1:8000";
 
 const nextConfig: NextConfig = {
+  // Emits a self-contained server (.next/standalone) with only the node_modules it actually uses —
+  // keeps the production Docker image small, which means faster cold starts when the container
+  // scales up from zero. `next dev` ignores this.
+  output: "standalone",
   // The rewrite proxy defaults to a 30s timeout, but /api/generate and /api/runs/{id}/revise can
   // legitimately take 30-90s (they run a multi-step Gemini pipeline) — without this, long runs get
   // killed with a "socket hang up" right as the backend is still working.

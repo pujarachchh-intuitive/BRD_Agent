@@ -90,13 +90,16 @@ async def revise(run_id: str, req: ReviseRequest, current_user: UserPublic = Dep
     return result
 
 
+# The routes below are plain `def`, not `async def`: their Databricks/filesystem calls are
+# blocking, and FastAPI runs a `def` route in its threadpool — an `async def` one would stall the
+# event loop (and with it every other in-flight request) for as long as its queries take.
 @app.get("/api/runs")
-async def list_runs(current_user: UserPublic = Depends(get_current_user)):
+def list_runs(current_user: UserPublic = Depends(get_current_user)):
     return {"runs": service.list_runs(current_user)}
 
 
 @app.get("/api/runs/{run_id}")
-async def get_run(run_id: str, current_user: UserPublic = Depends(get_current_user)):
+def get_run(run_id: str, current_user: UserPublic = Depends(get_current_user)):
     result = service.load_run(run_id, current_user)
     if result is None:
         raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
@@ -104,7 +107,7 @@ async def get_run(run_id: str, current_user: UserPublic = Depends(get_current_us
 
 
 @app.post("/api/runs/{run_id}/diagrams")
-async def upload_diagrams(run_id: str, req: DiagramsRequest, current_user: UserPublic = Depends(get_current_user)):
+def upload_diagrams(run_id: str, req: DiagramsRequest, current_user: UserPublic = Depends(get_current_user)):
     saved = []
     if req.architecture:
         service.save_diagram_png(run_id, "architecture", req.architecture, current_user)
@@ -116,7 +119,7 @@ async def upload_diagrams(run_id: str, req: DiagramsRequest, current_user: UserP
 
 
 @app.post("/api/runs/{run_id}/export/{doc}")
-async def export_document(run_id: str, doc: str, current_user: UserPublic = Depends(get_current_user)):
+def export_document(run_id: str, doc: str, current_user: UserPublic = Depends(get_current_user)):
     try:
         out_path = service.export_docx(run_id, doc, current_user)
     except HTTPException:

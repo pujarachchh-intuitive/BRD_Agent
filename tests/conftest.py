@@ -9,11 +9,13 @@ module object rather than a `from x import y` alias, specifically so that patchi
 attribute here is observed by every caller regardless of which file it lives in.
 """
 
+import json
 import os
 import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 import pytest
 
@@ -140,17 +142,42 @@ class FakeProjectStore:
 
 
 class FakeGenerationRunsStore:
-    """Mirrors webapp/runs_repository.py — the run_id -> (user_id, project_id) ownership map."""
+    """Mirrors webapp/runs_repository.py — the run_id -> (user_id, project_id) ownership map.
+    list_runs joins against a FakeProjectStore when one is attached (see the fake_runs fixture)."""
 
     def __init__(self):
         self.runs_by_id: dict[str, dict] = {}
+        self.projects: Optional["FakeProjectStore"] = None
 
-    def insert_generation_run(self, *, run_id, user_id, project_id, **_kwargs):
-        self.runs_by_id[run_id] = {"user_id": user_id, "project_id": project_id}
+    def insert_generation_run(self, *, run_id, user_id, project_id, metadata=None, **kwargs):
+        self.runs_by_id[run_id] = {
+            "user_id": user_id,
+            "project_id": project_id,
+            "model": kwargs.get("model"),
+            "input_tokens": kwargs.get("input_tokens"),
+            "output_tokens": kwargs.get("output_tokens"),
+            "total_tokens": kwargs.get("total_tokens"),
+            "latency_ms": kwargs.get("latency_ms"),
+            "metadata": json.dumps(metadata) if metadata is not None else None,
+        }
 
     def get_run_owner(self, run_id):
         row = self.runs_by_id.get(run_id)
-        return dict(row) if row else None
+        return {"user_id": row["user_id"], "project_id": row["project_id"]} if row else None
+
+    def list_runs(self, user_id=None):
+        rows = []
+        for run_id, row in self.runs_by_id.items():
+            if user_id is not None and row["user_id"] != user_id:
+                continue
+            project = self.projects.get_project_by_id(row["project_id"]) if self.projects else None
+            rows.append({
+                "run_id": run_id,
+                **row,
+                "project_name": project["project_name"] if project else None,
+                "is_legacy": project["is_legacy"] if project else None,
+            })
+        return rows
 
     def list_run_ids_for_user(self, user_id):
         return {run_id for run_id, row in self.runs_by_id.items() if row["user_id"] == user_id}
@@ -193,6 +220,9 @@ class FakeDocumentsTable:
     def list_documents_for_project(self, project_id):
         return [dict(d) for d in self.documents if d["project_id"] == project_id]
 
+    def list_run_documents_of_types(self, document_types):
+        return [dict(d) for d in self.documents if d.get("run_id") and d["document_type"] in document_types]
+
     def backfill_run_id(self, document_id, run_id):
         for document in self.documents:
             if document["document_id"] == document_id:
@@ -214,6 +244,7 @@ def fake_documents(monkeypatch):
     monkeypatch.setattr(documents_repository, "create_document", store.create_document)
     monkeypatch.setattr(documents_repository, "get_documents_for_run", store.get_documents_for_run)
     monkeypatch.setattr(documents_repository, "list_documents_for_project", store.list_documents_for_project)
+    monkeypatch.setattr(documents_repository, "list_run_documents_of_types", store.list_run_documents_of_types)
     monkeypatch.setattr(documents_repository, "backfill_run_id", store.backfill_run_id)
     monkeypatch.setattr(documents_repository, "upload_to_volume", store.upload_to_volume)
     monkeypatch.setattr(documents_repository, "download_from_volume", store.download_from_volume)
@@ -254,11 +285,13 @@ def fake_projects(monkeypatch):
 
 
 @pytest.fixture
-def fake_runs(monkeypatch):
+def fake_runs(monkeypatch, fake_projects):
     store = FakeGenerationRunsStore()
+    store.projects = fake_projects
     monkeypatch.setattr(runs_repository, "insert_generation_run", store.insert_generation_run)
     monkeypatch.setattr(runs_repository, "get_run_owner", store.get_run_owner)
     monkeypatch.setattr(runs_repository, "list_run_ids_for_user", store.list_run_ids_for_user)
+    monkeypatch.setattr(runs_repository, "list_runs", store.list_runs)
     return store
 
 

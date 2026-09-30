@@ -24,13 +24,15 @@ def _set_session_cookie(response: Response, token: str) -> None:
     )
 
 
+# register/login/logout are plain `def` so FastAPI runs their blocking Databricks calls (and
+# login's Argon2 hashing) in its threadpool instead of on the event loop — see webapp/server.py.
 @router.post("/register", response_model=UserPublic, status_code=status.HTTP_201_CREATED)
-async def register(payload: RegisterRequest) -> UserPublic:
+def register(payload: RegisterRequest) -> UserPublic:
     return service.register_user(payload)
 
 
 @router.post("/login", response_model=UserPublic)
-async def login(payload: LoginRequest, response: Response) -> UserPublic:
+def login(payload: LoginRequest, response: Response) -> UserPublic:
     user, token = service.authenticate_user(payload)
     _set_session_cookie(response, token)
     return user
@@ -42,7 +44,7 @@ async def me(current_user: UserPublic = Depends(get_current_user)) -> UserPublic
 
 
 @router.post("/logout")
-async def logout(
+def logout(
     response: Response,
     session_token: Optional[str] = Cookie(default=None, alias=SESSION_COOKIE_NAME),
 ) -> dict:

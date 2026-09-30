@@ -16,6 +16,7 @@ from typing import Optional
 from webapp.db import execute, fetch_all, fetch_one, qualified
 
 GENERATION_RUNS_TABLE = qualified("generation_runs")
+PROJECTS_TABLE = qualified("projects")
 
 
 def insert_generation_run(
@@ -76,6 +77,24 @@ def get_run_owner(run_id: str) -> Optional[dict]:
     return fetch_one(
         f"SELECT user_id, project_id FROM {GENERATION_RUNS_TABLE} WHERE run_id = :run_id LIMIT 1",
         {"run_id": run_id},
+    )
+
+
+def list_runs(user_id: Optional[str] = None) -> list[dict]:
+    """One row per run_id (its most recent generation_runs row), joined to its project's name and
+    is_legacy flag — every run when user_id is None (ADMIN), otherwise only that user's own. This
+    is what GET /api/runs lists, so run history comes from Databricks rather than from whatever
+    run folders happen to exist on the local disk of the machine serving the request."""
+    where = "WHERE r.user_id = :user_id" if user_id else ""
+    return fetch_all(
+        f"""SELECT r.run_id, r.user_id, r.project_id, r.generation_type, r.model, r.input_tokens,
+                   r.output_tokens, r.total_tokens, r.latency_ms, r.metadata,
+                   p.project_name, p.is_legacy
+            FROM {GENERATION_RUNS_TABLE} r
+            LEFT JOIN {PROJECTS_TABLE} p ON p.project_id = r.project_id
+            {where}
+            QUALIFY ROW_NUMBER() OVER (PARTITION BY r.run_id ORDER BY r.timestamp DESC) = 1""",
+        {"user_id": user_id} if user_id else {},
     )
 
 

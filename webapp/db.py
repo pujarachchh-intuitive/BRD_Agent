@@ -8,17 +8,21 @@ from a Python backend — no ORM, since Delta/Unity Catalog isn't a relational e
 targets.
 """
 
+import atexit
 import os
+import queue
+import time
 import uuid
-from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Any, Callable, Optional, TypeVar
 
 from databricks import sql as databricks_sql
 
 CATALOG = os.getenv("DATABRICKS_CATALOG", "dbx-ai-agents")
 SCHEMA = os.getenv("DATABRICKS_SCHEMA", "brd_generator")
 VOLUME = os.getenv("DATABRICKS_VOLUME", "brd_artifacts")
+
+T = TypeVar("T")
 
 # The Volume upload/download (upload_to_volume/download_from_volume, below) read/write a local
 # file via the SQL connector's staging PUT/GET commands, which refuse to touch any path outside
@@ -61,27 +65,93 @@ def _connection_kwargs() -> dict:
     }
 
 
-@contextmanager
-def _cursor() -> Iterator[Any]:
-    connection = databricks_sql.connect(**_connection_kwargs())
+# Opening a connection (TLS + a new warehouse session) costs 1.5-5s, while a query on an open one
+# costs ~0.5s — and a single page can run 5-10 queries. So connections are pooled and reused.
+# The connector's connections aren't safe to share between threads concurrently (threadsafety=1),
+# so each one is checked out by a single caller at a time; FastAPI's threadpool can run several
+# requests at once, hence more than one pooled connection.
+_POOL_SIZE = int(os.getenv("DATABRICKS_POOL_SIZE", "4"))
+# A connection idle longer than this is closed rather than reused — well inside any server-side
+# session timeout, so a pooled connection is never one Databricks has already dropped.
+_MAX_IDLE_SECONDS = 10 * 60
+_pool: "queue.LifoQueue[tuple[Any, float]]" = queue.LifoQueue(maxsize=_POOL_SIZE)
+
+
+def _close_quietly(resource: Any) -> None:
+    try:
+        resource.close()
+    except Exception:  # noqa: BLE001 — already broken/closed; nothing useful to do with the error
+        pass
+
+
+@atexit.register
+def _close_pool() -> None:
+    """Closes pooled sessions while the interpreter is still intact — left to garbage collection
+    at shutdown, the connector logs a noisy "Attempt to close session raised" error per connection."""
+    while True:
+        try:
+            connection, _ = _pool.get_nowait()
+        except queue.Empty:
+            return
+        _close_quietly(connection)
+
+
+def _acquire() -> tuple[Any, bool]:
+    """(connection, reused) — reused is False for a brand-new connection."""
+    while True:
+        try:
+            connection, last_used = _pool.get_nowait()
+        except queue.Empty:
+            return databricks_sql.connect(**_connection_kwargs()), False
+        if time.monotonic() - last_used < _MAX_IDLE_SECONDS:
+            return connection, True
+        _close_quietly(connection)
+
+
+def _release(connection: Any) -> None:
+    try:
+        _pool.put_nowait((connection, time.monotonic()))
+    except queue.Full:
+        _close_quietly(connection)
+
+
+def _run(work: Callable[[Any], T], *, retry_on_stale: bool) -> T:
+    """Runs work(cursor) on a pooled connection. A connection that errors is discarded, never
+    returned to the pool. If it was a reused connection and retry_on_stale is set, the work is
+    retried once on a fresh connection — only callers whose work is safe to repeat (reads,
+    overwriting PUT/GET) pass that, so a failed INSERT is never silently run twice."""
+    connection, reused = _acquire()
     try:
         cursor = connection.cursor()
         try:
-            yield cursor
+            result = work(cursor)
         finally:
-            cursor.close()
-    finally:
-        connection.close()
+            _close_quietly(cursor)
+    except Exception:
+        _close_quietly(connection)
+        if not (reused and retry_on_stale):
+            raise
+        connection = databricks_sql.connect(**_connection_kwargs())
+        try:
+            cursor = connection.cursor()
+            try:
+                result = work(cursor)
+            finally:
+                _close_quietly(cursor)
+        except Exception:
+            _close_quietly(connection)
+            raise
+    _release(connection)
+    return result
 
 
 def execute(query: str, params: Optional[dict] = None) -> None:
     """Runs a statement with no result set (INSERT/UPDATE)."""
-    with _cursor() as cursor:
-        cursor.execute(query, params or {})
+    _run(lambda cursor: cursor.execute(query, params or {}), retry_on_stale=False)
 
 
 def fetch_one(query: str, params: Optional[dict] = None) -> Optional[dict]:
-    with _cursor() as cursor:
+    def work(cursor: Any) -> Optional[dict]:
         cursor.execute(query, params or {})
         row = cursor.fetchone()
         if row is None:
@@ -89,12 +159,16 @@ def fetch_one(query: str, params: Optional[dict] = None) -> Optional[dict]:
         columns = [c[0] for c in cursor.description]
         return dict(zip(columns, row))
 
+    return _run(work, retry_on_stale=True)
+
 
 def fetch_all(query: str, params: Optional[dict] = None) -> list[dict]:
-    with _cursor() as cursor:
+    def work(cursor: Any) -> list[dict]:
         cursor.execute(query, params or {})
         columns = [c[0] for c in cursor.description]
         return [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+    return _run(work, retry_on_stale=True)
 
 
 def upload_to_volume(local_path: Path, destination_volume_path: str) -> None:
@@ -110,8 +184,7 @@ def upload_to_volume(local_path: Path, destination_volume_path: str) -> None:
     embedded in the statement (the destination Volume path is already forward-slash only)."""
     local = str(local_path).replace("\\", "/").replace("'", "''")
     dest = destination_volume_path.replace("'", "''")
-    with _cursor() as cursor:
-        cursor.execute(f"PUT '{local}' INTO '{dest}' OVERWRITE")
+    _run(lambda cursor: cursor.execute(f"PUT '{local}' INTO '{dest}' OVERWRITE"), retry_on_stale=True)
 
 
 def download_from_volume(source_volume_path: str) -> bytes:
@@ -125,8 +198,7 @@ def download_from_volume(source_volume_path: str) -> bytes:
     source = source_volume_path.replace("'", "''")
     local = str(scratch_path).replace("\\", "/").replace("'", "''")
     try:
-        with _cursor() as cursor:
-            cursor.execute(f"GET '{source}' TO '{local}'")
+        _run(lambda cursor: cursor.execute(f"GET '{source}' TO '{local}'"), retry_on_stale=True)
         return scratch_path.read_bytes()
     finally:
         scratch_path.unlink(missing_ok=True)

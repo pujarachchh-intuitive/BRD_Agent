@@ -8,14 +8,21 @@ COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
 ARG BACKEND_URL
-ENV BACKEND_URL=$BACKEND_URL
+ENV BACKEND_URL=$BACKEND_URL \
+    NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
+# Runtime image carries only the standalone server output (see output: "standalone" in
+# next.config.ts), not the full node_modules — a fraction of the size of the build stage.
 FROM node:22-alpine
 WORKDIR /app
-ENV NODE_ENV=production
-ARG BACKEND_URL
-ENV BACKEND_URL=$BACKEND_URL
-COPY --from=build /app ./
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    HOSTNAME=0.0.0.0 \
+    PORT=3000
+COPY --from=build /app/public ./public
+COPY --from=build /app/.next/standalone ./
+COPY --from=build /app/.next/static ./.next/static
+USER node
 EXPOSE 3000
-CMD ["npx", "next", "start", "-H", "0.0.0.0", "-p", "3000"]
+CMD ["node", "server.js"]

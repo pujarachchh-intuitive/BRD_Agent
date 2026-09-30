@@ -9,13 +9,15 @@ import json
 import re
 import shutil
 import subprocess
+import uuid
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import HTTPException, status
 
 from brd_agent_suite.config import MODEL_NAME, PROVIDER_NAME
-from brd_agent_suite.observability import LOGS_ROOT
+from brd_agent_suite.observability import LOGS_ROOT, _estimate_cost_usd
 from brd_agent_suite.pipeline import build_document_pipeline
 from brd_agent_suite.sub_agents.gap_filler_agent import build_gap_filler_agent
 from brd_agent_suite.sub_agents.revision_agent import build_revision_agent
@@ -165,7 +167,14 @@ def _record_generation_run(result: dict, current_user: UserPublic, project: dict
         output_tokens=log_stats["output_tokens"],
         total_tokens=log_stats["total_tokens"],
         latency_ms=latency_ms,
-        metadata={"parent_run_id": result.get("parent_run_id")},
+        # cost_by_agent and consistency_status are stored here so GET /api/runs can report them
+        # from Databricks alone — the per-call logs and the report file they come from otherwise
+        # live only on the disk of whichever machine generated the run.
+        metadata={
+            "parent_run_id": result.get("parent_run_id"),
+            "cost_by_agent": log_stats["cost_by_agent"],
+            "consistency_status": _consistency_status_from_text(result.get("consistency_report")),
+        },
     )
     action = "BRD_GENERATED" if generation_type == "generate" else "BRD_UPDATED"
     audit.insert_audit_log(
@@ -230,7 +239,7 @@ async def revise_run(run_id: str, change_request: str, *, current_user: UserPubl
     owner = runs_repository.get_run_owner(run_id)  # None only possible here for an ADMIN caller
     project = projects_service.get_owned_project_or_404(owner["project_id"], current_user) if owner else None
 
-    existing_path = OUTPUT_ROOT / run_id / "requirements.json"
+    existing_path = _ensure_local_files(run_id, ["requirements.json"]) / "requirements.json"
     if not existing_path.exists():
         raise FileNotFoundError(f"No requirements.json found for run {run_id}")
     existing = json.loads(existing_path.read_text(encoding="utf-8"))
@@ -250,20 +259,26 @@ async def revise_run(run_id: str, change_request: str, *, current_user: UserPubl
     return result
 
 
+def _consistency_status_from_text(report: Optional[str]) -> Optional[str]:
+    """"pass" | "issues" | None (no report). Same PASS/no-contradictions heuristic the frontend's
+    ConsistencyPanel applies to a single run's report — mirrored here so the dashboard can
+    aggregate a pass rate across every run without re-fetching each one's full report."""
+    if not report:
+        return None
+    head = report[:400]
+    if re.search(r"\bPASS\b", head, re.IGNORECASE) or re.search(r"no contradictions", head, re.IGNORECASE):
+        return "pass"
+    return "issues"
+
+
 def _read_consistency_status(run_dir: Path) -> Optional[str]:
-    """"pass" | "issues" | None (no report on disk). Same PASS/no-contradictions heuristic the
-    frontend's ConsistencyPanel applies to a single run's report — mirrored here so the dashboard
-    can aggregate a pass rate across every run without re-fetching each one's full report."""
     report_path = run_dir / "consistency_report.md"
     if not report_path.exists():
         return None
     try:
-        head = report_path.read_text(encoding="utf-8")[:400]
+        return _consistency_status_from_text(report_path.read_text(encoding="utf-8"))
     except OSError:
         return None
-    if re.search(r"\bPASS\b", head, re.IGNORECASE) or re.search(r"no contradictions", head, re.IGNORECASE):
-        return "pass"
-    return "issues"
 
 
 def _read_run_meta(run_dir: Path) -> dict:
@@ -353,50 +368,126 @@ def aggregate_run_log(run_id: str) -> dict:
     }
 
 
-def list_runs(current_user: UserPublic) -> list[dict]:
-    """Every run that has ever been written to OUTPUT_ROOT — regardless of whether it came from
-    this webapp's form or from `adk web`/`adk run` directly, since both write to the same directory
-    via run_pipeline_and_write. Newest first (run_id is a sortable UTC timestamp prefix).
+def _latest_by_file_name(documents: list[dict]) -> dict[str, dict]:
+    """file_name -> that file's highest-version document row (a run re-exporting a docx, say,
+    records a new version under the same run_id)."""
+    latest: dict[str, dict] = {}
+    for doc in documents:
+        current = latest.get(doc["file_name"])
+        if current is None or doc["version"] > current["version"]:
+            latest[doc["file_name"]] = doc
+    return latest
 
-    ADMIN sees every run, including legacy ones with no ownership record. A USER only sees runs
-    recorded (in generation_runs) against them — legacy runs are hidden from normal users
-    entirely rather than shown-but-403, until the migration step assigns them an owner.
 
-    Enriched with generation duration and token/cost totals where that data exists (run_meta.json
-    and logs/<run_id>.jsonl respectively — both only present for runs generated after that
-    instrumentation was added, so the dashboard must treat these as optional per run)."""
-    if not OUTPUT_ROOT.exists():
-        return []
-    allowed_run_ids: Optional[set[str]] = (
-        None if current_user.role == "ADMIN" else runs_repository.list_run_ids_for_user(current_user.user_id)
-    )
-    runs = []
-    for run_dir in OUTPUT_ROOT.iterdir():
-        req_path = run_dir / "requirements.json"
-        if not run_dir.is_dir() or not req_path.exists():
+def _ensure_local_files(run_id: str, filenames: list[str], documents: Optional[list[dict]] = None) -> Path:
+    """Returns the run's working folder under OUTPUT_ROOT, first downloading from the Databricks
+    Volume any of `filenames` that aren't already there (skipping any Databricks doesn't have
+    either). Databricks is the source of truth for every run; OUTPUT_ROOT is only the working
+    folder the pipeline and pandoc read and write files in — so a run generated on a different
+    machine (a laptop vs. the deployed backend) still works everywhere, with nothing to copy by
+    hand. `documents` can pass the run's already-fetched document rows to save a query."""
+    run_dir = OUTPUT_ROOT / run_id
+    missing = [name for name in filenames if not (run_dir / name).exists()]
+    if not missing:
+        return run_dir
+    if documents is None:
+        documents = documents_repository.get_documents_for_run(run_id)
+    by_name = _latest_by_file_name(documents)
+    for name in missing:
+        doc = by_name.get(name)
+        if doc is None:
             continue
-        if allowed_run_ids is not None and run_dir.name not in allowed_run_ids:
-            continue
-        project_name = None
+        content = documents_repository.download_document_content(doc)
+        run_dir.mkdir(parents=True, exist_ok=True)
+        # Written under a temporary name and then renamed, so a concurrent reader never sees a
+        # half-written file.
+        partial = run_dir / f".{name}.{uuid.uuid4().hex}.part"
+        partial.write_bytes(content)
+        partial.replace(run_dir / name)
+    return run_dir
+
+
+def _parse_run_metadata(raw: Any) -> dict:
+    if isinstance(raw, dict):
+        return raw
+    try:
+        parsed = json.loads(raw) if raw else {}
+    except (TypeError, json.JSONDecodeError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _run_summary(row: dict, documents: list[dict]) -> dict:
+    """One GET /api/runs entry, built from the run's generation_runs row. Only what that row
+    can't supply is read from files, fetched from the Volume if needed: the consistency report
+    (for runs recorded before consistency_status was stored in metadata) and requirements.json
+    (for legacy runs, whose project is the shared "Legacy Runs" one, so the real project name is
+    only in the requirements). Local run_meta.json and logs/<run_id>.jsonl are used as fallbacks
+    only — runs recorded before duration/cost were captured have no value anywhere, so the
+    dashboard must still treat those fields as optional per run."""
+    run_id = row["run_id"]
+    meta = _parse_run_metadata(row.get("metadata"))
+    project_name = None if row.get("is_legacy") else row.get("project_name")
+    consistency_status = meta.get("consistency_status")
+
+    needed = []
+    if consistency_status is None:
+        needed.append("consistency_report.md")
+    if not project_name:
+        needed.append("requirements.json")
+    run_dir = OUTPUT_ROOT / run_id
+    if needed:
         try:
-            project_name = json.loads(req_path.read_text(encoding="utf-8")).get("project_name") or None
-        except (json.JSONDecodeError, OSError):
-            pass
-        meta = _read_run_meta(run_dir)
-        log_stats = aggregate_run_log(run_dir.name)
-        runs.append({
-            "run_id": run_dir.name,
-            "project_name": project_name,
-            "duration_seconds": meta.get("duration_seconds"),
-            "total_tokens": log_stats["total_tokens"],
-            "estimated_cost_usd": log_stats["estimated_cost_usd"],
-            "cost_by_agent": log_stats["cost_by_agent"],
-            "consistency_status": _read_consistency_status(run_dir),
-            # Only present for revisions made through this webapp's "request a change" flow, and
-            # only from here onward (run_meta.json didn't record it before this was added) — a run
-            # with no parent is either an original request or an older, unlinkable revision.
-            "parent_run_id": meta.get("parent_run_id"),
-        })
+            run_dir = _ensure_local_files(run_id, needed, documents)
+        except Exception as exc:  # noqa: BLE001 — one unreachable file must not hide the whole run list
+            print(f"Could not fetch {needed} for run {run_id} from Databricks: {exc}")
+
+    if consistency_status is None:
+        consistency_status = _read_consistency_status(run_dir)
+    if not project_name:
+        try:
+            project_name = json.loads((run_dir / "requirements.json").read_text(encoding="utf-8")).get("project_name")
+        except (OSError, json.JSONDecodeError):
+            project_name = row.get("project_name")
+
+    local_meta = _read_run_meta(run_dir)
+    log_stats = aggregate_run_log(run_id)
+    latency_ms = row.get("latency_ms")
+    cost = _estimate_cost_usd(row.get("model"), row.get("input_tokens"), row.get("output_tokens"))["estimated_cost_usd"]
+    return {
+        "run_id": run_id,
+        "project_name": project_name or None,
+        "duration_seconds": latency_ms / 1000 if latency_ms is not None else local_meta.get("duration_seconds"),
+        "total_tokens": row.get("total_tokens") if row.get("total_tokens") is not None else log_stats["total_tokens"],
+        "estimated_cost_usd": cost if cost is not None else log_stats["estimated_cost_usd"],
+        "cost_by_agent": meta.get("cost_by_agent") or log_stats["cost_by_agent"],
+        "consistency_status": consistency_status,
+        # Only present for revisions made through this webapp's "request a change" flow — a run
+        # with no parent is either an original request or an older, unlinkable revision.
+        "parent_run_id": meta.get("parent_run_id") or local_meta.get("parent_run_id"),
+    }
+
+
+def list_runs(current_user: UserPublic) -> list[dict]:
+    """Every run recorded in Databricks (generation_runs) that has documents to show — newest
+    first (run_id is a sortable UTC timestamp prefix). ADMIN sees every run; a USER sees only
+    runs recorded against them. Read from Databricks, not the local disk, so the list is the same
+    no matter which machine (a laptop, the deployed backend) serves it or generated the run.
+
+    Runs with no REQUIREMENTS_JSON document are left out, matching load_run, which can't open
+    them either (e.g. a run whose document upload never completed)."""
+    rows = runs_repository.list_runs(None if current_user.role == "ADMIN" else current_user.user_id)
+    documents_by_run: dict[str, list[dict]] = {}
+    for doc in documents_repository.list_run_documents_of_types(["REQUIREMENTS_JSON", "CONSISTENCY_REPORT"]):
+        documents_by_run.setdefault(doc["run_id"], []).append(doc)
+    rows = [
+        row for row in rows
+        if any(d["document_type"] == "REQUIREMENTS_JSON" for d in documents_by_run.get(row["run_id"], []))
+    ]
+    # Parallel, since a run whose files aren't on this machine yet costs a Volume download or two.
+    # Workers match the db connection pool size.
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        runs = list(pool.map(lambda row: _run_summary(row, documents_by_run[row["run_id"]]), rows))
     runs.sort(key=lambda r: r["run_id"], reverse=True)
     return runs
 
@@ -428,10 +519,7 @@ def load_run(run_id: str, current_user: UserPublic) -> Optional[dict]:
     if requirements_doc is None:
         return None
 
-    def _content(document_type: str) -> Optional[str]:
-        doc = by_type.get(document_type)
-        if doc is None:
-            return None
+    def _download(doc: dict) -> str:
         # The uploaded bytes preserve whatever line endings the pipeline originally wrote to disk
         # (CRLF on Windows) — read_text()'s universal-newlines mode silently normalized that to
         # "\n" under the old local-filesystem read path, so normalize the same way here to keep
@@ -439,11 +527,18 @@ def load_run(run_id: str, current_user: UserPublic) -> Optional[dict]:
         raw = documents_repository.download_document_content(doc).decode("utf-8")
         return raw.replace("\r\n", "\n")
 
+    # Each download is its own Volume round trip (~0.5s+), and a run has up to 7 of them — fetched
+    # concurrently rather than one after another. Workers match the db connection pool size.
+    wanted = ["REQUIREMENTS_JSON", "CONSISTENCY_REPORT", *_DOCUMENT_TYPE_TO_RESULT_KEY]
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = {t: pool.submit(_download, by_type[t]) for t in wanted if t in by_type}
+        contents = {t: f.result() for t, f in futures.items()}
+
     return {
         "run_id": run_id,
-        "requirements_json": json.loads(_content("REQUIREMENTS_JSON")),
-        "documents": {key: _content(doc_type) for doc_type, key in _DOCUMENT_TYPE_TO_RESULT_KEY.items()},
-        "consistency_report": _content("CONSISTENCY_REPORT"),
+        "requirements_json": json.loads(contents["REQUIREMENTS_JSON"]),
+        "documents": {key: contents.get(doc_type) for doc_type, key in _DOCUMENT_TYPE_TO_RESULT_KEY.items()},
+        "consistency_report": contents.get("CONSISTENCY_REPORT"),
     }
 
 
@@ -503,7 +598,7 @@ def export_docx(run_id: str, doc: str, current_user: UserPublic) -> Path:
     _authorize_run_access(run_id, current_user)
     if doc not in _DOC_FILENAMES:
         raise ValueError(f"Unknown document '{doc}', expected one of {list(_DOC_FILENAMES)}")
-    run_dir = OUTPUT_ROOT / run_id
+    run_dir = _ensure_local_files(run_id, [_DOC_FILENAMES[doc], "architecture.png", "flowchart.png"])
     md_path = run_dir / _DOC_FILENAMES[doc]
     if not md_path.exists():
         raise FileNotFoundError(f"{md_path} does not exist")

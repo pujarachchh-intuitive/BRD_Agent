@@ -109,6 +109,17 @@ def get_documents_for_run(run_id: str) -> list[dict]:
     return fetch_all(f"SELECT * FROM {DOCUMENTS_TABLE} WHERE run_id = :run_id", {"run_id": run_id})
 
 
+def list_run_documents_of_types(document_types: list[str]) -> list[dict]:
+    """Every run-tagged document of the given types, across all runs, in one query — lets GET
+    /api/runs find each run's requirements/consistency-report files without a query per run."""
+    placeholders = ", ".join(f":type_{i}" for i in range(len(document_types)))
+    return fetch_all(
+        f"""SELECT run_id, document_type, version, file_path, file_name FROM {DOCUMENTS_TABLE}
+        WHERE run_id IS NOT NULL AND document_type IN ({placeholders})""",
+        {f"type_{i}": document_type for i, document_type in enumerate(document_types)},
+    )
+
+
 def download_document_content(document: dict) -> bytes:
     """Fetches a document row's actual file content from the Volume."""
     return download_from_volume(document["file_path"])
