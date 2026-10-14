@@ -13,3 +13,7 @@ frontend/
 tests/
 *.pdf
 *.docx
+# ...except the branded pandoc reference doc the DOCX export needs.
+!webapp/branding/intuitive_reference.docx
+# Fonts are fetched fresh inside the image build (see Dockerfile), never copied from a dev machine.
+webapp/branding/fonts/

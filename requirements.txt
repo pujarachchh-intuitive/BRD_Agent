@@ -4,6 +4,12 @@ python-dotenv>=1.0
 fastapi>=0.110
 uvicorn>=0.29
 python-multipart>=0.0.9
+# Text extraction from uploaded PDFs (webapp/ingestion/). BSD-licensed, pure Python. DOCX goes
+# through pandoc, already installed in the image.
+pypdf>=5.0
+# Timezone database for zoneinfo: the document-control Date row is shown in DOCUMENT_TIMEZONE
+# (webapp/document_control.py), and Windows / slim images have no system copy.
+tzdata>=2024.1
 
 # Auth (webapp/auth/): Databricks users/audit_logs access, password hashing, session JWTs.
 databricks-sql-connector>=3.0

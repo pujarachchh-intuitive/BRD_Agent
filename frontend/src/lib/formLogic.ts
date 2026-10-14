@@ -123,4 +123,78 @@ export function isDraftValueFilled(value: string | DraftRepeaterRow[] | undefine
   return value.some((row) => Object.values(row).some((v) => v.trim().length > 0));
 }
 
+/** Stricter than isDraftValueFilled: a repeater row only counts if one of its typed cells has
+ * text, since a fresh row's dropdowns (e.g. priority "M") are pre-filled. Used to decide whether
+ * a required field on the review page has really been answered. */
+export function isDraftFieldAnswered(def: FieldDef, value: string | DraftRepeaterRow[] | undefined): boolean {
+  if (value === undefined) return false;
+  if (typeof value === "string") return value.trim().length > 0;
+  if (def.kind !== "list_obj") return false;
+  const typed = def.subfields.filter((sf) => sf.type !== "select").map((sf) => sf.name);
+  return value.some((row) => typed.some((name) => (row[name] ?? "").trim().length > 0));
+}
+
+/** The inverse of collectFormData: an API-shaped form (e.g. one extracted from uploaded
+ * documents) as the draft the form edits. */
+export function formToDraft(form: FormState): DraftFormState {
+  const draft = emptyDraftState();
+  for (const [name, def] of Object.entries(FIELD_DEFS)) {
+    const value = form[name];
+    if (def.kind === "scalar") {
+      draft[name] = typeof value === "string" ? value : "";
+    } else if (def.kind === "list_str") {
+      draft[name] = Array.isArray(value) ? (value as string[]).filter((v) => typeof v === "string").join("\n") : "";
+    } else {
+      const rows = Array.isArray(value) ? (value as Record<string, unknown>[]) : [];
+      draft[name] = rows
+        .filter((row) => row && typeof row === "object")
+        .map((row) => {
+          const out = emptyDraftRow(def);
+          for (const sf of def.subfields) {
+            const cell = row[sf.name];
+            if (Array.isArray(cell)) out[sf.name] = cell.join(", ");
+            else if (typeof cell === "string" && (sf.type !== "select" || sf.options?.includes(cell))) out[sf.name] = cell;
+          }
+          return out;
+        });
+    }
+  }
+  return draft;
+}
+
+/** Adds a one-click suggested answer to a draft field: replaces a scalar, appends a line to a
+ * list, or appends a row to a repeater. A row suggestion written as "Role: interest" (or with an
+ * em dash) fills the row's first two cells. */
+export function applySuggestion(def: FieldDef, current: string | DraftRepeaterRow[], suggestion: string): string | DraftRepeaterRow[] {
+  if (def.kind === "scalar") return suggestion;
+  if (def.kind === "list_str") {
+    const existing = typeof current === "string" ? current.trim() : "";
+    return existing ? `${existing}\n${suggestion}` : suggestion;
+  }
+  const row = emptyDraftRow(def);
+  const textCells = def.subfields.filter((sf) => sf.type !== "select");
+  const match = suggestion.match(/^(.+?)\s*(?::|—|–| - )\s*(.+)$/);
+  if (match && textCells.length >= 2) {
+    row[textCells[0].name] = match[1].trim();
+    row[textCells[1].name] = match[2].trim();
+  } else if (textCells.length) {
+    row[textCells[0].name] = suggestion;
+  }
+  return [...(Array.isArray(current) ? current : []), row];
+}
+
+/** Review-page submit: like collectFormData, except that any non-excluded field still empty is
+ * handed to the AI (auto-generate) rather than blocking submission — the uploaded documents are
+ * the grounding the regular form's "add at least one point" rule otherwise asks the user for.
+ * Blocking fields are checked separately, before this is ever called. */
+export function collectReviewedForm(draft: DraftFormState, autoFields: Set<string>, excludedFields: Set<string>): CollectedForm {
+  const collected = collectFormData(draft, autoFields, excludedFields);
+  const auto = new Set(collected.auto_fields);
+  for (const [name, def] of Object.entries(FIELD_DEFS)) {
+    if (def.skipToggles || def.critical || excludedFields.has(name)) continue;
+    if (isFieldValueEmpty(collected.form[name], def)) auto.add(name);
+  }
+  return { ...collected, auto_fields: [...auto] };
+}
+
 export { FIELD_DEFS, FORM_SECTIONS };

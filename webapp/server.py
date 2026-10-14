@@ -7,7 +7,7 @@ Run from the project root (so `brd_agent_suite` and `webapp` both resolve as top
 """
 
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from dotenv import load_dotenv
 
@@ -27,17 +27,25 @@ print(f"Gemini API key configured: {gemini_api_key_configured()}")  # never logs
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from . import service
 from .auth.dependencies import get_current_user
+from .branding.docx_export import DiagramPart, decode_png_data_url
 from .auth.router import router as auth_router
 from .auth.schemas import UserPublic
+from .doc_templates.router import admin_router as templates_admin_router
+from .doc_templates.router import router as templates_router
+from .doc_templates.schemas import DomainChoice, TemplateUsage
+from .ingestion.router import router as ingestion_router
 from .projects.router import router as projects_router
 
 app = FastAPI(title="BRD Agent Suite — API")
 app.include_router(auth_router)
 app.include_router(projects_router)
+app.include_router(ingestion_router)
+app.include_router(templates_router)
+app.include_router(templates_admin_router)
 
 
 class GenerateRequest(BaseModel):
@@ -47,6 +55,12 @@ class GenerateRequest(BaseModel):
     # If omitted, generate_from_form auto-creates a new project owned by current_user. If given,
     # ownership is re-verified server-side — this value is never trusted on its own.
     project_id: Optional[str] = None
+    # Set when the form was started from a domain template; every item it offered must have a
+    # decision (re-checked server-side against the stored template version).
+    template: Optional[TemplateUsage] = None
+    # The optional domain picked on a blank start (ignored when a template is given — the
+    # template's own domain is used).
+    domain: Optional[DomainChoice] = None
 
 
 class ReviseRequest(BaseModel):
@@ -56,6 +70,23 @@ class ReviseRequest(BaseModel):
 class DiagramsRequest(BaseModel):
     architecture: Optional[str] = None  # data:image/png;base64,...
     flowchart: Optional[str] = None
+
+
+class DiagramPartModel(BaseModel):
+    png: str  # data:image/png;base64,...
+    width_pt: float = Field(gt=0)
+    height_pt: float = Field(gt=0)
+    label: str = ""  # caption suffix, e.g. "part 2 of 3"
+
+
+class ExportRequest(BaseModel):
+    # Diagram name -> the diagram already split into A4-page-sized images by the frontend
+    # (frontend/src/lib/diagramLayout.ts). Diagrams left out fall back to the uploaded full PNG.
+    diagrams: dict[Literal["architecture", "flowchart"], list[DiagramPartModel]] = {}
+
+
+# Far more pages than any real diagram needs; just bounds what one request can make us write.
+MAX_DIAGRAM_PARTS = 40
 
 
 @app.get("/api/form-schema")
@@ -68,7 +99,13 @@ async def form_schema():
 async def generate(req: GenerateRequest, current_user: UserPublic = Depends(get_current_user)):
     try:
         result = await service.generate_from_form(
-            req.form, req.auto_fields, req.excluded_sections, current_user=current_user, project_id=req.project_id
+            req.form,
+            req.auto_fields,
+            req.excluded_sections,
+            current_user=current_user,
+            project_id=req.project_id,
+            template=req.template,
+            domain=req.domain,
         )
     except HTTPException:
         raise  # ownership/validation errors from service.py — surface as-is, don't mask as a 500
@@ -119,9 +156,21 @@ def upload_diagrams(run_id: str, req: DiagramsRequest, current_user: UserPublic 
 
 
 @app.post("/api/runs/{run_id}/export/{doc}")
-def export_document(run_id: str, doc: str, current_user: UserPublic = Depends(get_current_user)):
+def export_document(
+    run_id: str, doc: str, req: Optional[ExportRequest] = None, current_user: UserPublic = Depends(get_current_user)
+):
     try:
-        out_path = service.export_docx(run_id, doc, current_user)
+        diagram_parts = {
+            name: [
+                DiagramPart(png=decode_png_data_url(p.png), width_pt=p.width_pt, height_pt=p.height_pt, label=p.label)
+                for p in parts[:MAX_DIAGRAM_PARTS]
+            ]
+            for name, parts in (req.diagrams if req else {}).items()
+        }
+    except ValueError as exc:  # bad base64 / not a PNG
+        raise HTTPException(status_code=400, detail=f"Invalid diagram image: {exc}") from exc
+    try:
+        out_path = service.export_docx(run_id, doc, current_user, diagram_parts)
     except HTTPException:
         raise
     except (FileNotFoundError, ValueError) as exc:

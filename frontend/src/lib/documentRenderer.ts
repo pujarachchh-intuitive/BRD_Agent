@@ -4,14 +4,22 @@
 //
 // Ported from webapp/static/documents.js as an imperative renderer (rather than reactive React
 // state) because mermaid needs real, laid-out DOM nodes to measure and wrap text into, and the
-// rendered <svg> nodes themselves are cached and reused later for PNG/DOCX export — trying to model
-// that as React state would mean re-deriving DOM nodes from state, which is exactly backwards here.
+// rendered diagrams are measured and reused later for PNG/DOCX export and printing — trying to
+// model that as React state would mean re-deriving DOM nodes from state, which is exactly
+// backwards here.
 
 import { marked } from "marked";
-import { apiExportDocx, apiUploadDiagrams } from "./api";
+import { apiExportDocx, apiUploadDiagrams, ExportDiagramPart } from "./api";
+import {
+  DiagramPagePart,
+  layoutDiagramForPages,
+  prepareDiagram,
+  PreparedDiagram,
+  rasterizeWholeDiagram,
+} from "./diagramLayout";
 import { wrapMermaidLabels } from "./mermaidLabels";
-import { ensureMermaidInitialized, mermaid } from "./mermaidSetup";
-import { svgToPngDataUrl, triggerDownload } from "./svgToPng";
+import { ensureDiagramFontsLoaded, ensureMermaidInitialized, mermaid } from "./mermaidSetup";
+import { triggerDownload } from "./svgToPng";
 import { DiagramKey, RunResult } from "./types";
 
 interface DocTabConfig {
@@ -69,6 +77,7 @@ function buildMarkdownContent(mdText: string | null, mermaidSrcs: Record<Diagram
     if (key && mermaidSrcs[key]) {
       const figure = document.createElement("figure");
       figure.className = "inline-diagram not-prose";
+      figure.dataset.diagram = key;
       const pre = document.createElement("pre");
       pre.className = "mermaid";
       pre.id = nextMermaidId(`mermaid-${key}`);
@@ -98,7 +107,8 @@ export interface DocumentRendererOptions {
 export class DocumentRenderer {
   private opts: DocumentRendererOptions;
   private tabPanels: Record<string, HTMLDivElement> = {};
-  private diagramSvg: Partial<Record<DiagramKey, SVGSVGElement>> = {};
+  private prepared: Partial<Record<DiagramKey, PreparedDiagram>> = {};
+  private pageParts: Partial<Record<DiagramKey, Promise<DiagramPagePart[]>>> = {};
   private activeTab = "brd";
   private navClickHandler: (event: MouseEvent) => void;
 
@@ -132,12 +142,25 @@ export class DocumentRenderer {
 
     panelsContainer.innerHTML = "";
     this.tabPanels = {};
-    this.diagramSvg = {};
+    this.prepared = {};
+    this.pageParts = {};
 
+    // Each diagram is first laid out off-screen to pick the drawing direction that reads best on
+    // an A4 portrait page (diagramLayout.ts); the preview then shows that same layout, so what's on
+    // screen is what gets exported and printed.
+    await ensureDiagramFontsLoaded();
     const mermaidSrcs: Record<DiagramKey, string> = {
       architecture: wrapMermaidLabels(data.documents.architecture_mermaid),
       flowchart: wrapMermaidLabels(data.documents.flowchart_mermaid),
     };
+    for (const key of ["flowchart", "architecture"] as DiagramKey[]) {
+      const prepared = mermaidSrcs[key] ? await prepareDiagram(mermaidSrcs[key]) : null;
+      if (superseded()) return;
+      if (prepared) {
+        this.prepared[key] = prepared;
+        mermaidSrcs[key] = prepared.source;
+      }
+    }
 
     for (const cfg of DOC_TAB_CONFIG) {
       if (superseded()) return;
@@ -161,8 +184,6 @@ export class DocumentRenderer {
         try {
           await mermaid.run({ nodes: [node.el] });
           if (superseded()) return;
-          const svg = node.el.querySelector("svg");
-          if (svg && !this.diagramSvg[node.key]) this.diagramSvg[node.key] = svg;
         } catch (err) {
           if (!superseded()) console.error(`Failed to render inline ${node.key} diagram`, err);
         }
@@ -194,8 +215,6 @@ export class DocumentRenderer {
         try {
           await mermaid.run({ nodes: [pre] });
           if (superseded()) return;
-          const svg = pre.querySelector("svg");
-          if (svg) this.diagramSvg[cfg.key] = svg;
         } catch (err) {
           if (superseded()) return;
           console.error(`Failed to render ${cfg.key} diagram`, err);
@@ -239,7 +258,7 @@ export class DocumentRenderer {
     printBtn.type = "button";
     printBtn.className = "btn btn-secondary";
     printBtn.textContent = "Print / Save as PDF";
-    printBtn.addEventListener("click", () => this.printDocument(cfg));
+    printBtn.addEventListener("click", () => this.printDocument(cfg, printBtn));
     bar.appendChild(printBtn);
 
     return bar;
@@ -257,9 +276,23 @@ export class DocumentRenderer {
     return bar;
   }
 
+  /** The diagram split into A4-portrait-page-sized images (computed once per run, then reused by
+   * every export and print). */
+  private getPageParts(key: DiagramKey): Promise<DiagramPagePart[]> | null {
+    const prepared = this.prepared[key];
+    if (!prepared) return null;
+    if (!this.pageParts[key]) {
+      this.pageParts[key] = layoutDiagramForPages(prepared).catch((err) => {
+        delete this.pageParts[key];
+        throw err;
+      });
+    }
+    return this.pageParts[key];
+  }
+
   private async downloadDiagramPng(key: DiagramKey, btn: HTMLButtonElement): Promise<void> {
-    const svg = this.diagramSvg[key];
-    if (!svg) {
+    const prepared = this.prepared[key];
+    if (!prepared) {
       this.opts.onError(`No ${key} diagram is available to download for this run.`);
       return;
     }
@@ -267,7 +300,7 @@ export class DocumentRenderer {
     btn.disabled = true;
     btn.textContent = "Preparing...";
     try {
-      const dataUrl = await svgToPngDataUrl(svg);
+      const dataUrl = await rasterizeWholeDiagram(prepared);
       triggerDownload(dataUrl, `${key}.png`);
     } catch (err) {
       this.opts.onError(err instanceof Error ? err.message : String(err));
@@ -287,17 +320,23 @@ export class DocumentRenderer {
     btn.disabled = true;
     btn.textContent = "Exporting...";
     try {
+      // The full-size PNGs are still uploaded (they're kept with the run in Databricks); the
+      // document itself uses the page-sized parts sent with the export request.
       const payload: Record<string, string> = {};
+      const diagramParts: Partial<Record<DiagramKey, ExportDiagramPart[]>> = {};
       for (const key of cfg.diagrams) {
-        const svg = this.diagramSvg[key];
-        if (svg) {
-          payload[key] = await svgToPngDataUrl(svg);
+        const prepared = this.prepared[key];
+        if (!prepared) continue;
+        payload[key] = await rasterizeWholeDiagram(prepared);
+        const parts = await this.getPageParts(key);
+        if (parts) {
+          diagramParts[key] = parts.map((p) => ({ png: p.dataUrl, width_pt: p.widthPt, height_pt: p.heightPt, label: p.label }));
         }
       }
       if (Object.keys(payload).length) {
         await apiUploadDiagrams(runId, payload);
       }
-      const blob = await apiExportDocx(runId, cfg.exportDoc);
+      const blob = await apiExportDocx(runId, cfg.exportDoc, diagramParts);
       const blobUrl = URL.createObjectURL(blob);
       triggerDownload(blobUrl, cfg.filename);
       setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
@@ -309,20 +348,61 @@ export class DocumentRenderer {
     }
   }
 
-  private printDocument(cfg: DocTabConfig): void {
+  /** Prints in the same layout as the DOCX: A4 portrait, logo in the header of every page (the
+   * repeating <thead> below), page number bottom right (globals.css @page), and each diagram as
+   * the same page-sized parts the DOCX export uses. */
+  private async printDocument(cfg: DocTabConfig, btn: HTMLButtonElement): Promise<void> {
     const panel = this.tabPanels[cfg.key];
     const content = panel && panel.querySelector(".doc-scroll");
     if (!content) {
       this.opts.onError("Nothing to print yet.");
       return;
     }
-    const printRoot = this.opts.printRootEl;
-    printRoot.innerHTML = "";
-    const heading = document.createElement("h1");
-    heading.className = "print-title";
-    heading.textContent = cfg.title;
-    printRoot.appendChild(heading);
-    printRoot.appendChild(content.cloneNode(true));
-    window.print();
+    const originalLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Preparing...";
+    try {
+      const body = content.cloneNode(true) as HTMLElement;
+      for (const figure of Array.from(body.querySelectorAll<HTMLElement>("figure.inline-diagram[data-diagram]"))) {
+        const parts = await this.getPageParts(figure.dataset.diagram as DiagramKey);
+        if (!parts || !parts.length) continue;
+        const caption = figure.querySelector("figcaption")?.textContent || "";
+        const replacement = document.createDocumentFragment();
+        for (const part of parts) {
+          const partFigure = document.createElement("figure");
+          partFigure.className = "print-diagram not-prose";
+          const img = document.createElement("img");
+          img.src = part.dataUrl;
+          img.alt = caption;
+          img.style.width = `${part.widthPt}pt`;
+          img.style.height = `${part.heightPt}pt`;
+          const partCaption = document.createElement("figcaption");
+          partCaption.textContent = part.label ? `${caption} (${part.label})` : caption;
+          partFigure.append(img, partCaption);
+          replacement.appendChild(partFigure);
+        }
+        figure.replaceWith(replacement);
+      }
+
+      const printRoot = this.opts.printRootEl;
+      printRoot.innerHTML = "";
+      const table = document.createElement("table");
+      table.className = "print-page";
+      const logo = document.createElement("img");
+      logo.src = "/brand/intuitive-logo.png";
+      logo.alt = "Intuitive";
+      logo.className = "print-logo";
+      table.createTHead().insertRow().insertCell().appendChild(logo);
+      table.createTBody().insertRow().insertCell().appendChild(body);
+      printRoot.appendChild(table);
+
+      await Promise.all(Array.from(printRoot.querySelectorAll("img")).map((img) => img.decode().catch(() => undefined)));
+      window.print();
+    } catch (err) {
+      this.opts.onError(err instanceof Error ? err.message : String(err));
+    } finally {
+      btn.disabled = false;
+      btn.textContent = originalLabel;
+    }
   }
 }

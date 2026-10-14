@@ -32,8 +32,8 @@ A document-control table:
 |---|---|
 | Document ID | "BRD-<doc_id_acronym from the source data, used verbatim>-001" |
 | Version | 1.0 |
-| Date | Use today's date if known from context, otherwise write "[Date]" |
-| Author | "[Author]" |
+| Date | "[Date]" — write exactly this; the system fills in the generation date |
+| Author | "[Author]" — write exactly this; the system fills in the requesting user's name |
 | Status | "Draft — pending stakeholder review" |
 | Scope of this document | One line naming which phases/parts this document covers |
 | Target platforms | Derived from tech_stack_preferences / system_components |

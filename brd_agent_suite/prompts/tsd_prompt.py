@@ -35,7 +35,8 @@ OMISSION rule above.
 # TECHNICAL SPECIFICATION DOCUMENT
 ## <the project's name, written directly from the source data>
 
-A document-control table: Version 1.0 | Date "[Date]" | Author "[Author]" | Status "Draft — for review" |
+A document-control table: Version 1.0 | Date "[Date]" | Author "[Author]" (write those two placeholders
+exactly; the system fills in the generation date and the requesting user's name) | Status "Draft — for review" |
 Reference "Companion to BRD-<doc_id_acronym from the source data, used verbatim>-001".
 
 ## 1. Purpose, Scope, and Status [ALWAYS]

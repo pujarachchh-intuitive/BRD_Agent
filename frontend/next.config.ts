@@ -13,8 +13,12 @@ const nextConfig: NextConfig = {
   // The rewrite proxy defaults to a 30s timeout, but /api/generate and /api/runs/{id}/revise can
   // legitimately take 30-90s (they run a multi-step Gemini pipeline) — without this, long runs get
   // killed with a "socket hang up" right as the backend is still working.
+  // proxyClientMaxBodySize: document uploads (webapp/ingestion/) can total 30 MB. Next's default cap
+  // of 10 MB only applies once a proxy/middleware file exists, but raising it now keeps adding one
+  // later from silently breaking uploads.
   experimental: {
     proxyTimeout: 180000,
+    proxyClientMaxBodySize: "32mb",
   },
   // Next dev blocks cross-origin access to its own dev-only endpoints (HMR websocket, dev fonts)
   // by default. Visiting via 127.0.0.1 instead of localhost otherwise triggers harmless-looking but

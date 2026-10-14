@@ -1,0 +1,324 @@
+{
+  "slug": "healthcare",
+  "name": "Healthcare",
+  "domain_id": "healthcare",
+  "description": "Starter content for US healthcare systems that handle protected health information, based on the US HIPAA Privacy, Security and Breach Notification Rules (45 CFR Parts 160 and 164). Confirm applicability with your compliance team.",
+  "icon": "health",
+  "color": "#0f9d8a",
+  "content": {
+    "domain_guidance": "Scope: US healthcare. This guidance and the starter items are based on US federal regulations. They are not legal advice and do not cover state law or non-US law.\nHIPAA applies to covered entities (health plans, health care clearinghouses, and health care providers that transmit health information electronically in connection with transactions covered by HIPAA) and to their business associates. Whether it applies to this system depends on the organization's role and on whether the system creates, receives, maintains or transmits protected health information (PHI). Electronic PHI is called ePHI.\nKey rules: the Privacy Rule (45 CFR Part 164 Subpart E) covers uses and disclosures of PHI, the minimum necessary standard and individual rights such as the right of access. The Security Rule (Subpart C) covers administrative, physical and technical safeguards for ePHI. Its implementation specifications are either Required or Addressable. Addressable does not mean optional: the organization must assess the specification and either implement it, or document why it is not reasonable and appropriate and implement an equivalent alternative measure if reasonable and appropriate. The Breach Notification Rule (Subpart D) covers notification after a breach of unsecured PHI.\nThe Security Rule does not name specific encryption algorithms, key lengths, uptime targets, response times or a retention period for audit logs. The 6-year retention period in the Security Rule and Privacy Rule applies to required policies, procedures and other required documentation, not specifically to audit logs. HHS published proposed changes to the Security Rule on January 6, 2025; they are a proposal and must not be presented as current requirements.\nOther rules may apply depending on the situation: 42 CFR Part 2 for substance use disorder treatment records, the information blocking rule (45 CFR Part 171) for health care providers, developers of certified health IT and health information networks or exchanges, and state health privacy and breach notification laws.\nTerminology: PHI, ePHI, covered entity, business associate, business associate agreement (BAA), designated record set, minimum necessary, privacy official, security official.\nDrafting rules: Never invent regulation names, section numbers, deadlines, retention periods, encryption algorithms or numeric thresholds that are not present in the form or in this guidance. Phrase compliance points as items to confirm with the organization's privacy, security or compliance team, not as legal conclusions. If the organization's HIPAA role is not stated, say that it must be confirmed and record it as an open question.",
+    "questions": [
+      {
+        "key": "handles_phi",
+        "text": "Will the system create, receive, maintain or transmit protected health information (PHI) for a HIPAA covered entity or business associate?",
+        "default": true
+      },
+      {
+        "key": "is_covered_entity",
+        "text": "Is the organization operating the system a HIPAA covered entity (health plan, health care clearinghouse, or provider conducting HIPAA electronic transactions)?",
+        "default": false
+      },
+      {
+        "key": "vendors_handle_phi",
+        "text": "Will any vendor, cloud provider or subcontractor create, receive, maintain or transmit PHI for this system?",
+        "default": true
+      },
+      {
+        "key": "designated_record_set",
+        "text": "Will the system hold records in a designated record set, such as medical or billing records or records used to make decisions about individuals?",
+        "default": false
+      },
+      {
+        "key": "ehr_integration",
+        "text": "Will the system exchange data with an electronic health record (EHR) system?",
+        "default": false
+      }
+    ],
+    "items": {
+      "stakeholders": [
+        {
+          "key": "sh-privacy-official",
+          "values": {
+            "role": "HIPAA privacy official",
+            "interest": "Designated by the covered entity as responsible for developing and implementing its privacy policies and procedures. Reviews how the system uses and discloses PHI and how it supports individual rights such as access."
+          },
+          "tag": "regulatory",
+          "source": "HIPAA Privacy Rule, 45 CFR 164.530(a)(1)(i) - Personnel designations",
+          "source_url": "https://www.ecfr.gov/current/title-45/section-164.530",
+          "applies_if": "is_covered_entity"
+        },
+        {
+          "key": "sh-security-official",
+          "values": {
+            "role": "HIPAA security official",
+            "interest": "Designated as responsible for developing and implementing the organization's Security Rule policies and procedures. Approves the safeguards for ePHI in this system."
+          },
+          "tag": "regulatory",
+          "source": "HIPAA Security Rule, 45 CFR 164.308(a)(2) - Assigned security responsibility",
+          "source_url": "https://www.ecfr.gov/current/title-45/section-164.308",
+          "applies_if": "handles_phi"
+        }
+      ],
+      "functional_requirements": [
+        {
+          "key": "fr-access-control-unique-id",
+          "values": {
+            "description": "Allow access to ePHI only to persons or software programs that have been granted access rights, and assign each user a unique name and/or number so that user identity and activity can be identified and tracked.",
+            "priority": "M"
+          },
+          "tag": "regulatory",
+          "source": "HIPAA Security Rule, 45 CFR 164.312(a)(1) - Access control; 164.312(a)(2)(i) - Unique user identification (Required)",
+          "source_url": "https://www.ecfr.gov/current/title-45/section-164.312",
+          "applies_if": "handles_phi"
+        },
+        {
+          "key": "fr-emergency-access",
+          "values": {
+            "description": "Provide an emergency access procedure for obtaining necessary ePHI during an emergency, established in advance and used as needed.",
+            "priority": "M"
+          },
+          "tag": "regulatory",
+          "source": "HIPAA Security Rule, 45 CFR 164.312(a)(2)(ii) - Emergency access procedure (Required)",
+          "source_url": "https://www.ecfr.gov/current/title-45/section-164.312",
+          "applies_if": "handles_phi"
+        },
+        {
+          "key": "fr-automatic-logoff",
+          "values": {
+            "description": "Terminate an electronic session after a predetermined time of inactivity, where reasonable and appropriate. HIPAA treats this as an addressable specification and does not set the time period; if not implemented, document why and the equivalent alternative measure.",
+            "priority": "S"
+          },
+          "tag": "regulatory",
+          "source": "HIPAA Security Rule, 45 CFR 164.312(a)(2)(iii) - Automatic logoff (Addressable); 164.306(d)(3)",
+          "source_url": "https://www.ecfr.gov/current/title-45/section-164.312",
+          "applies_if": "handles_phi"
+        },
+        {
+          "key": "fr-minimum-necessary",
+          "values": {
+            "description": "Support limiting PHI used, disclosed or requested to the minimum necessary for the intended purpose, for example through role-based views and limited exports. The standard has exceptions, such as disclosures to a health care provider for treatment; confirm which flows are in scope with the privacy team.",
+            "priority": "M"
+          },
+          "tag": "regulatory",
+          "source": "HIPAA Privacy Rule, 45 CFR 164.502(b) - Minimum necessary; 164.514(d)",
+          "source_url": "https://www.ecfr.gov/current/title-45/section-164.502",
+          "applies_if": "handles_phi"
+        },
+        {
+          "key": "fr-right-of-access",
+          "values": {
+            "description": "Support individuals' right of access: locate and export an individual's PHI in the designated record set, including an electronic copy in the form and format requested if readily producible. The covered entity must act on a request no later than 30 days after receipt, with at most one extension of no more than 30 days.",
+            "priority": "M"
+          },
+          "tag": "regulatory",
+          "source": "HIPAA Privacy Rule, 45 CFR 164.524(b)(2) and (c)(2) - Access of individuals to PHI",
+          "source_url": "https://www.ecfr.gov/current/title-45/section-164.524",
+          "applies_if": "designated_record_set"
+        }
+      ],
+      "non_functional_requirements": [
+        {
+          "key": "nfr-audit-controls",
+          "values": {
+            "category": "Security",
+            "requirement": "Implement mechanisms that record and examine activity in information systems that contain or use ePHI, and support regular review of records such as audit logs, access reports and security incident tracking reports. HIPAA does not set a specific retention period for audit logs; agree it with the compliance team."
+          },
+          "tag": "regulatory",
+          "source": "HIPAA Security Rule, 45 CFR 164.312(b) - Audit controls; 164.308(a)(1)(ii)(D) - Information system activity review (Required)",
+          "source_url": "https://www.ecfr.gov/current/title-45/section-164.312",
+          "applies_if": "handles_phi"
+        },
+        {
+          "key": "nfr-integrity",
+          "values": {
+            "category": "Security",
+            "requirement": "Protect ePHI from improper alteration or destruction. Where reasonable and appropriate, use electronic mechanisms to confirm that ePHI has not been altered or destroyed in an unauthorized manner (addressable; if not implemented, document why and the equivalent alternative measure)."
+          },
+          "tag": "regulatory",
+          "source": "HIPAA Security Rule, 45 CFR 164.312(c)(1) - Integrity; 164.312(c)(2) - Mechanism to authenticate ePHI (Addressable)",
+          "source_url": "https://www.ecfr.gov/current/title-45/section-164.312",
+          "applies_if": "handles_phi"
+        },
+        {
+          "key": "nfr-person-entity-authentication",
+          "values": {
+            "category": "Security",
+            "requirement": "Verify that a person or entity seeking access to ePHI is the one claimed before granting access."
+          },
+          "tag": "regulatory",
+          "source": "HIPAA Security Rule, 45 CFR 164.312(d) - Person or entity authentication",
+          "source_url": "https://www.ecfr.gov/current/title-45/section-164.312",
+          "applies_if": "handles_phi"
+        },
+        {
+          "key": "nfr-mfa",
+          "values": {
+            "category": "Security",
+            "requirement": "Use multi-factor authentication for workforce access to ePHI, at least for remote and administrative access. The current HIPAA Security Rule does not specifically mandate MFA; this is a recommended practice that supports the person or entity authentication standard."
+          },
+          "tag": "best_practice",
+          "source": "NIST SP 800-63B-4, Digital Identity Guidelines: Authentication and Authenticator Management",
+          "source_url": "https://csrc.nist.gov/pubs/sp/800/63/b/4/final",
+          "applies_if": "handles_phi"
+        },
+        {
+          "key": "nfr-transmission-security",
+          "values": {
+            "category": "Security",
+            "requirement": "Guard against unauthorized access to ePHI transmitted over electronic communications networks. Encrypt ePHI in transit and use integrity controls where reasonable and appropriate; both are addressable specifications, so if not implemented, document why and the equivalent alternative measure."
+          },
+          "tag": "regulatory",
+          "source": "HIPAA Security Rule, 45 CFR 164.312(e)(1) - Transmission security; 164.312(e)(2)(i)-(ii) (Addressable)",
+          "source_url": "https://www.ecfr.gov/current/title-45/section-164.312",
+          "applies_if": "handles_phi"
+        },
+        {
+          "key": "nfr-encryption-at-rest",
+          "values": {
+            "category": "Security",
+            "requirement": "Encrypt ePHI at rest where reasonable and appropriate. HIPAA treats this as an addressable specification and does not name an algorithm, so if not implemented, document why and the equivalent alternative measure. The security team should select the encryption method."
+          },
+          "tag": "regulatory",
+          "source": "HIPAA Security Rule, 45 CFR 164.312(a)(2)(iv) - Encryption and decryption (Addressable); 164.306(d)(3)",
+          "source_url": "https://www.ecfr.gov/current/title-45/section-164.312",
+          "applies_if": "handles_phi"
+        },
+        {
+          "key": "nfr-contingency-backup",
+          "values": {
+            "category": "Availability",
+            "requirement": "Support the organization's contingency plan: create and maintain retrievable exact copies of ePHI (data backup), procedures to restore any loss of data (disaster recovery), and continuation of critical business processes that protect ePHI while operating in emergency mode. HIPAA does not set recovery time targets; agree them with the business."
+          },
+          "tag": "regulatory",
+          "source": "HIPAA Security Rule, 45 CFR 164.308(a)(7)(ii)(A)-(C) - Data backup, disaster recovery and emergency mode operation plans (Required)",
+          "source_url": "https://www.ecfr.gov/current/title-45/section-164.308",
+          "applies_if": "handles_phi"
+        }
+      ],
+      "constraints": [
+        {
+          "key": "con-risk-analysis",
+          "values": {
+            "text": "The organization's HIPAA security risk analysis must cover the ePHI in this system (an accurate and thorough assessment of risks and vulnerabilities to its confidentiality, integrity and availability), and risks must be reduced to a reasonable and appropriate level."
+          },
+          "tag": "regulatory",
+          "source": "HIPAA Security Rule, 45 CFR 164.308(a)(1)(ii)(A) - Risk analysis and (B) - Risk management (Required)",
+          "source_url": "https://www.ecfr.gov/current/title-45/section-164.308",
+          "applies_if": "handles_phi"
+        },
+        {
+          "key": "con-business-associate-agreement",
+          "values": {
+            "text": "A written business associate agreement (or other arrangement allowed by HIPAA) must be in place before any vendor, cloud provider or subcontractor creates, receives, maintains or transmits PHI for this system."
+          },
+          "tag": "regulatory",
+          "source": "HIPAA, 45 CFR 164.502(e), 164.504(e), 164.308(b) and 164.314(a) - Business associate contracts",
+          "source_url": "https://www.ecfr.gov/current/title-45/section-164.504",
+          "applies_if": "vendors_handle_phi"
+        },
+        {
+          "key": "con-breach-notification-ce",
+          "values": {
+            "text": "After discovering a breach of unsecured PHI, a covered entity must notify affected individuals without unreasonable delay and no later than 60 calendar days after discovery. It must also notify HHS (at the same time as individuals for breaches of 500 or more individuals, otherwise within 60 days after the end of the calendar year) and, for more than 500 residents of a State or jurisdiction, prominent media outlets. A law enforcement delay may apply."
+          },
+          "tag": "regulatory",
+          "source": "HIPAA Breach Notification Rule, 45 CFR 164.404, 164.406, 164.408 and 164.412",
+          "source_url": "https://www.ecfr.gov/current/title-45/section-164.404",
+          "applies_if": "is_covered_entity"
+        },
+        {
+          "key": "con-breach-notification-ba",
+          "values": {
+            "text": "If the organization acts as a business associate, it must notify the covered entity of a breach of unsecured PHI without unreasonable delay and no later than 60 calendar days after discovery, identifying affected individuals to the extent possible. Also check the BAA for any shorter contractual timeline."
+          },
+          "tag": "regulatory",
+          "source": "HIPAA Breach Notification Rule, 45 CFR 164.410 - Notification by a business associate",
+          "source_url": "https://www.ecfr.gov/current/title-45/section-164.410",
+          "applies_if": "handles_phi"
+        },
+        {
+          "key": "con-documentation-retention",
+          "values": {
+            "text": "Retain required HIPAA policies, procedures and other required documentation (records of actions, activities or assessments that the rules require to be documented) for 6 years from the date of creation or the date when it last was in effect, whichever is later. This applies to required documentation, not specifically to system audit logs."
+          },
+          "tag": "regulatory",
+          "source": "HIPAA Security Rule, 45 CFR 164.316(b)(2)(i); Privacy Rule, 45 CFR 164.530(j)(2)",
+          "source_url": "https://www.ecfr.gov/current/title-45/section-164.316",
+          "applies_if": "handles_phi"
+        }
+      ],
+      "integrations": [
+        {
+          "key": "int-ehr-fhir",
+          "values": {
+            "text": "Integration with the EHR, typically through HL7 FHIR APIs. Health IT certified to the ONC standardized API criterion uses HL7 FHIR Release 4.0.1 as its API base standard. Confirm with the EHR vendor which FHIR version, implementation guides and authorization method its API supports."
+          },
+          "tag": "best_practice",
+          "source": "ONC Health IT certification, 45 CFR 170.315(g)(10) and API standards in 45 CFR 170.215(a)(1); HL7 FHIR",
+          "source_url": "https://www.ecfr.gov/current/title-45/section-170.215",
+          "applies_if": "ehr_integration"
+        }
+      ],
+      "risks": [
+        {
+          "key": "risk-phi-breach",
+          "values": {
+            "risk": "Unauthorized access to or disclosure of PHI, triggering breach notification obligations and harm to patients.",
+            "impact": "High",
+            "mitigation": "Role-based access, encryption where reasonable and appropriate, audit log review, and a tested incident response process."
+          },
+          "tag": "best_practice",
+          "source": "Industry practice; NIST SP 800-66 Rev. 2",
+          "source_url": "https://csrc.nist.gov/pubs/sp/800/66/r2/final",
+          "applies_if": "handles_phi"
+        },
+        {
+          "key": "risk-system-unavailable",
+          "values": {
+            "risk": "Ransomware or system failure makes ePHI unavailable and disrupts patient care or operations.",
+            "impact": "High",
+            "mitigation": "Regularly tested backups kept separate from production, documented restore procedures, and an emergency mode operation plan."
+          },
+          "tag": "best_practice",
+          "source": "Industry practice; NIST SP 800-66 Rev. 2",
+          "source_url": "https://csrc.nist.gov/pubs/sp/800/66/r2/final",
+          "applies_if": "handles_phi"
+        },
+        {
+          "key": "risk-phi-in-non-production",
+          "values": {
+            "risk": "Real PHI copied into development or test environments that lack production safeguards.",
+            "impact": "Medium",
+            "mitigation": "Use synthetic or de-identified data in non-production environments, or apply the same safeguards as production."
+          },
+          "tag": "best_practice",
+          "source": "Industry practice",
+          "source_url": null,
+          "applies_if": "handles_phi"
+        }
+      ],
+      "open_questions": [
+        {
+          "key": "oq-hipaa-role",
+          "values": {
+            "text": "Is the organization a HIPAA covered entity, a business associate, both, or neither for this system? Confirm with the privacy or compliance team."
+          },
+          "tag": "best_practice",
+          "source": "Industry practice; HIPAA definitions in 45 CFR 160.103",
+          "source_url": "https://www.ecfr.gov/current/title-45/section-160.103",
+          "applies_if": null
+        },
+        {
+          "key": "oq-other-health-laws",
+          "values": {
+            "text": "Do other laws apply, such as 42 CFR Part 2 for substance use disorder treatment records, the information blocking rule in 45 CFR Part 171, or state health privacy and breach notification laws? Confirm with legal or compliance."
+          },
+          "tag": "best_practice",
+          "source": "Industry practice; 42 CFR Part 2; 45 CFR Part 171",
+          "source_url": "https://www.ecfr.gov/current/title-42/part-2",
+          "applies_if": null
+        }
+      ]
+    }
+  }
+}

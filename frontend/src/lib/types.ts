@@ -60,6 +60,10 @@ export interface GeneratePayload {
   /** Optional: generate into an existing project instead of auto-creating a new one. The
    * backend re-verifies ownership regardless — this is never trusted as the source of ownership. */
   project_id?: string;
+  /** Set when the form was started from a template: what the user did with every item it offered. */
+  template?: TemplateUsagePayload;
+  /** The optional domain chosen on a blank start (a template brings its own). */
+  domain?: DomainChoicePayload;
 }
 
 export interface RunDocuments {
@@ -122,6 +126,204 @@ export interface BackendRunSummary {
 }
 
 export type DiagramKey = "architecture" | "flowchart";
+
+// ---------- Document upload flow (webapp/ingestion/) ----------
+
+/** One background job from GET /api/jobs/{id} (webapp/jobs.py). */
+export interface Job<TResult = unknown> {
+  job_id: string;
+  kind: "document_extraction" | "document_generation";
+  status: "running" | "succeeded" | "failed";
+  stage: string;
+  progress: string[];
+  result: TResult | null;
+  error: string | null;
+}
+
+/** Mirrors webapp/ingestion/verify.py's review states. */
+export type ReviewState = "found" | "confirm" | "blocking" | "auto" | "optional";
+
+export interface Evidence {
+  file: string;
+  location: string;
+  quote: string;
+  /** null: the source is a scanned PDF, so the quote couldn't be checked. */
+  verified: boolean | null;
+}
+
+export interface FieldReview {
+  field: string;
+  label: string;
+  state: ReviewState;
+  status: "found" | "partial" | "inferred" | "missing";
+  confidence: "high" | "medium" | "low";
+  reason: string;
+  note: string;
+  evidence: Evidence[];
+}
+
+export interface ExtractionConflict {
+  field: string;
+  description: string;
+  options: { value: string; file: string; location: string }[];
+}
+
+export interface GapQuestion {
+  field: string;
+  question: string;
+  suggested_answers: string[];
+}
+
+export interface ExtractedFile {
+  file_name: string;
+  kind: "pdf" | "docx" | "txt" | "md";
+  page_count: number | null;
+  size_bytes: number;
+  scanned: boolean;
+}
+
+/** GET /api/documents/extractions/{id}, also the result of an extraction job. */
+export interface ExtractionResult {
+  extraction_id: string;
+  project_id: string;
+  project_name: string;
+  created_at: string;
+  mode: "single" | "per_document";
+  files: ExtractedFile[];
+  /** Same shape as GeneratePayload.form, with no IDs on list items. */
+  form: FormState;
+  fields: FieldReview[];
+  blocking: string[];
+  confirm: string[];
+  auto_fields: string[];
+  conflicts: ExtractionConflict[];
+  gap_questions: GapQuestion[];
+  summary: string;
+}
+
+export interface DocumentGenerationResult {
+  run_id: string;
+  project_id: string;
+  project_name: string;
+}
+
+// ---------- Domain templates (webapp/doc_templates/) ----------
+
+/** "regulatory": required by a named law, regulation or mandatory standard. "best_practice":
+ * widely accepted industry practice, not legally required. */
+export type TemplateTag = "regulatory" | "best_practice";
+
+export interface TemplateItem {
+  key: string;
+  /** Subfield name -> value for list_obj fields; { text } for list_str fields. */
+  values: Record<string, string>;
+  tag: TemplateTag;
+  source: string;
+  source_url: string | null;
+  /** Only offered when the user answers this applicability question "yes". */
+  applies_if: string | null;
+}
+
+export interface TemplateQuestion {
+  key: string;
+  text: string;
+  default: boolean;
+}
+
+export interface TemplateContent {
+  domain_guidance: string;
+  questions: TemplateQuestion[];
+  items: Record<string, TemplateItem[]>;
+}
+
+/** GET /api/templates entry: a template's current published version. */
+export interface PublishedTemplate {
+  template_id: string;
+  slug: string;
+  name: string;
+  domain_id: string;
+  domain_name: string;
+  description: string;
+  icon: string;
+  color: string;
+  version: number;
+  published_at: string | null;
+  counts: Record<string, number>;
+  content: TemplateContent;
+}
+
+export interface Domain {
+  domain_id: string;
+  name: string;
+  sort_order: number;
+  is_active: boolean;
+}
+
+export type TemplateDecision = "accepted" | "edited" | "rejected";
+
+export interface TemplateUsagePayload {
+  template_id: string;
+  version: number;
+  answers: Record<string, boolean>;
+  decisions: Record<string, TemplateDecision>;
+}
+
+export type DomainChoicePayload = { domain_id: string } | { other: string };
+
+// Template Studio (admin)
+
+export interface AdminTemplate {
+  template_id: string;
+  slug: string;
+  name: string;
+  domain_id: string;
+  domain_name: string;
+  description: string;
+  icon: string;
+  color: string;
+  status: "ACTIVE" | "RETIRED";
+  published_version: number | null;
+  draft_version: number | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface TemplateVersionSummary {
+  version: number;
+  status: "DRAFT" | "PUBLISHED";
+  change_note: string;
+  created_by: string | null;
+  created_at: string | null;
+  updated_by: string | null;
+  updated_at: string | null;
+  published_by: string | null;
+  published_at: string | null;
+}
+
+export interface TemplateVersion extends TemplateVersionSummary {
+  content: TemplateContent;
+}
+
+export interface AdminTemplateDetail {
+  template: AdminTemplate;
+  versions: TemplateVersionSummary[];
+  draft: TemplateVersion | null;
+  published: TemplateVersion | null;
+}
+
+export interface TemplateMetaInput {
+  name: string;
+  domain_id: string;
+  description: string;
+  icon: string;
+  color: string;
+}
+
+/** GET /api/admin/templates/schema: field name -> the value names its items need. */
+export interface TemplateSchema {
+  fields: Record<string, string[]>;
+  icons: string[];
+}
 
 // Mirrors webapp/auth/schemas.py's UserPublic — GET/POST /api/auth/* never return password_hash.
 export type UserRole = "USER" | "ADMIN";

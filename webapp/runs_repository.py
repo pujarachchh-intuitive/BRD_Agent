@@ -18,6 +18,13 @@ from webapp.db import execute, fetch_all, fetch_one, qualified
 GENERATION_RUNS_TABLE = qualified("generation_runs")
 PROJECTS_TABLE = qualified("projects")
 
+# generation_type -> the endpoint that produced it. Anything not listed is a revision.
+_ENDPOINTS = {
+    "generate": "/api/generate",
+    "document_extraction": "/api/documents/extract",
+    "document_upload": "/api/documents/extractions/{extraction_id}/generate",
+}
+
 
 def insert_generation_run(
     *,
@@ -62,7 +69,7 @@ def insert_generation_run(
             "status": status,
             "error_type": error_type,
             "error_message": error_message,
-            "endpoint": "/api/generate" if generation_type == "generate" else "/api/runs/{run_id}/revise",
+            "endpoint": _ENDPOINTS.get(generation_type, "/api/runs/{run_id}/revise"),
             "environment": os.getenv("APP_ENV", "development"),
             "metadata": json.dumps(metadata) if metadata is not None else None,
         },

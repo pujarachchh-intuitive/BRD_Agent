@@ -6,3 +6,7 @@ brd_agent_suite/output/
 brd_agent_suite/logs/
 .claude/
 .databricks_downloads/
+# Satoshi font files: the font licence forbids redistributing them through this public repo.
+# Fetched from Fontshare instead by `python -m webapp.branding.fonts` and the Dockerfiles.
+webapp/branding/fonts/
+frontend/public/fonts/

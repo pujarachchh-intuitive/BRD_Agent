@@ -38,6 +38,13 @@ DOCUMENT_TYPES_BY_FILENAME: dict[str, str] = {
     "Executive_OnePager.docx": "ONEPAGER_DOCX",
 }
 
+# Uploaded project documents (webapp/ingestion/). Not in the filename map above, because an upload
+# keeps its own file name: the ingestion code passes these types explicitly. Every row of these
+# types is tagged with its extraction_id in the run_id column.
+SOURCE_DOCUMENT = "SOURCE_DOCUMENT"  # the original uploaded file
+SOURCE_TEXT = "SOURCE_TEXT"  # the text parsed from it (absent for a scanned PDF)
+SOURCE_EXTRACTION = "SOURCE_EXTRACTION"  # extraction.json: the reviewed-form payload
+
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"

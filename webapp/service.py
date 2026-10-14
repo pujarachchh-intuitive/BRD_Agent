@@ -4,15 +4,13 @@ RequirementsModel, running the form/revision pipelines, and exporting documents 
 Kept separate from server.py so the FastAPI route handlers stay thin.
 """
 
-import base64
+import asyncio
 import json
 import re
-import shutil
-import subprocess
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from fastapi import HTTPException, status
 
@@ -23,7 +21,18 @@ from brd_agent_suite.sub_agents.gap_filler_agent import build_gap_filler_agent
 from brd_agent_suite.sub_agents.revision_agent import build_revision_agent
 from brd_agent_suite.tools import OUTPUT_ROOT, new_run_id, run_pipeline_and_write
 from webapp import audit, documents_repository, runs_repository
+from webapp.auth import repository as auth_repository
 from webapp.auth.schemas import UserPublic
+from webapp.branding.docx_export import DiagramPart, decode_png_data_url, markdown_to_docx, place_diagrams
+from webapp.doc_templates import service as templates_service
+from webapp.doc_templates.schemas import DomainChoice, TemplateUsage
+from webapp.document_control import (
+    CONTROLLED_DOCUMENTS,
+    fill_document_control,
+    format_document_date,
+    has_document_control,
+    run_created_at,
+)
 from webapp.projects import service as projects_service
 
 # (field name, kind) — kind is "scalar" | "list_str" | "list_obj".
@@ -149,7 +158,17 @@ def _authorize_run_access(run_id: str, current_user: UserPublic) -> None:
     projects_service.get_owned_project_or_404(owner["project_id"], current_user)
 
 
-def _record_generation_run(result: dict, current_user: UserPublic, project: dict, generation_type: str) -> None:
+# generation_type -> the audit action recorded for it. Anything not listed is a revision.
+_GENERATION_AUDIT_ACTIONS = {"generate": "BRD_GENERATED", "document_upload": "BRD_GENERATED"}
+
+
+def _record_generation_run(
+    result: dict,
+    current_user: UserPublic,
+    project: dict,
+    generation_type: str,
+    extra_metadata: Optional[dict] = None,
+) -> None:
     log_stats = aggregate_run_log(result["run_id"])
     latency_ms = int(result["duration_seconds"] * 1000) if result.get("duration_seconds") is not None else None
     runs_repository.insert_generation_run(
@@ -174,9 +193,10 @@ def _record_generation_run(result: dict, current_user: UserPublic, project: dict
             "parent_run_id": result.get("parent_run_id"),
             "cost_by_agent": log_stats["cost_by_agent"],
             "consistency_status": _consistency_status_from_text(result.get("consistency_report")),
+            **(extra_metadata or {}),
         },
     )
-    action = "BRD_GENERATED" if generation_type == "generate" else "BRD_UPDATED"
+    action = _GENERATION_AUDIT_ACTIONS.get(generation_type, "BRD_UPDATED")
     audit.insert_audit_log(
         user_id=current_user.user_id,
         action=action,
@@ -185,6 +205,37 @@ def _record_generation_run(result: dict, current_user: UserPublic, project: dict
         metadata={"run_id": result["run_id"]},
     )
     _sync_run_documents(project["project_id"], result["run_id"], result.get("files") or {})
+
+
+def _run_author_name(run_id: str) -> Optional[str]:
+    """Name of the user who generated a run, or None for a legacy run with no recorded owner."""
+    owner = runs_repository.get_run_owner(run_id)
+    user = auth_repository.get_user_by_id(owner["user_id"]) if owner else None
+    return (user or {}).get("name") or None
+
+
+def _with_document_control(run_id: str, documents: dict[str, Optional[str]], author: Optional[str] = None) -> dict:
+    """documents (state key -> markdown) with the BRD/TSD Date and Author rows filled in: the date
+    the run was generated, and `author` — or, if not given, the name of the user the run is
+    recorded against (only looked up when a document actually has those rows)."""
+    keys = [k for k in CONTROLLED_DOCUMENTS if has_document_control(documents.get(k))]
+    if not keys:
+        return documents
+    created = run_created_at(run_id)
+    date = format_document_date(created) if created else None
+    author = author or _run_author_name(run_id)
+    return {**documents, **{k: fill_document_control(documents[k], date=date, author=author) for k in keys}}
+
+
+def _apply_document_control(result: dict, author: str) -> None:
+    """Fills the Date/Author rows of a just-generated run's BRD and TSD — both the files written to
+    disk (before they're uploaded) and the copies returned to the browser."""
+    documents = result.get("documents") or {}
+    filled = _with_document_control(result["run_id"], documents, author)
+    for key, path in (result.get("files") or {}).items():
+        if key in CONTROLLED_DOCUMENTS and filled.get(key) != documents.get(key):
+            Path(path).write_text(filled[key], encoding="utf-8")
+    result["documents"] = filled
 
 
 def _sync_run_documents(project_id: str, run_id: str, written_files: dict[str, str]) -> None:
@@ -210,26 +261,83 @@ async def generate_from_form(
     *,
     current_user: UserPublic,
     project_id: Optional[str] = None,
+    template: Optional[TemplateUsage] = None,
+    domain: Optional[DomainChoice] = None,
 ) -> dict:
-    if project_id:
-        # Ownership of the (client-supplied) project_id is always re-verified server-side against
-        # who actually owns it in Databricks — never trusted just because the request named it.
-        project = projects_service.get_owned_project_or_404(project_id, current_user)
-    else:
+    project = projects_service.get_owned_project_or_404(project_id, current_user) if project_id else None
+    # Checked before a project is auto-created, so a rejected request (e.g. template items still
+    # awaiting review) never leaves an empty project behind.
+    template_metadata, domain_context = templates_service.resolve_generation_context(template, domain)
+    if project is None:
+        # Ownership of a client-supplied project_id was re-verified above against who actually
+        # owns it in Databricks — never trusted just because the request named it.
         project_name = (form.get("project_name") or "").strip() or "Untitled Project"
         project = projects_service.create_project_row(current_user, project_name)
 
+    result = await run_form_generation(
+        form,
+        auto_fields,
+        excluded_sections,
+        current_user=current_user,
+        project=project,
+        generation_type="generate",
+        extra_metadata=template_metadata or None,
+        domain_context=domain_context,
+    )
+    if "template" in template_metadata:
+        audit.insert_audit_log(
+            user_id=current_user.user_id,
+            action="TEMPLATE_APPLIED",
+            entity_type="template",
+            entity_id=template_metadata["template"]["template_id"],
+            metadata={
+                "run_id": result["run_id"],
+                "version": template_metadata["template"]["version"],
+                **template_metadata["template"]["summary"],
+            },
+        )
+    return result
+
+
+async def run_form_generation(
+    form: dict[str, Any],
+    auto_fields: list[str],
+    excluded_sections: Optional[list[str]],
+    *,
+    current_user: UserPublic,
+    project: dict,
+    generation_type: str,
+    source_context: Optional[str] = None,
+    extra_metadata: Optional[dict] = None,
+    on_agent_done: Optional[Callable[[str], None]] = None,
+    domain_context: Optional[str] = None,
+) -> dict:
+    """The form pipeline (gap-filler first stage) against an already-authorized project. Shared by
+    the plain form flow and the document-upload flow, which also passes the uploaded documents'
+    text as source_context for the gap-filler to ground its auto-generated fields in.
+    domain_context is the project's domain and its template guidance, if the user chose one."""
     partial = normalize_form(form, excluded_sections)
     auto_fields = [f for f in auto_fields if f not in partial["excluded_sections"]]
+    initial_state: dict[str, Any] = {"partial_requirements_json": partial, "auto_fields": auto_fields}
+    if source_context:
+        initial_state["source_context"] = source_context
+    if domain_context:
+        initial_state["domain_context"] = domain_context
     run_id = new_run_id()
     pipeline = build_document_pipeline(build_gap_filler_agent(), name="form_pipeline")
     result = await run_pipeline_and_write(
         pipeline,
         run_id,
         message_text="Complete the form as instructed.",
-        initial_state={"partial_requirements_json": partial, "auto_fields": auto_fields},
+        initial_state=initial_state,
+        on_agent_done=on_agent_done,
     )
-    _record_generation_run(result, current_user, project, generation_type="generate")
+    _apply_document_control(result, current_user.name)
+    # In a thread: it's several blocking Databricks writes, and the document flow runs this inside a
+    # background job, where blocking the event loop would stall every other request meanwhile.
+    await asyncio.to_thread(
+        _record_generation_run, result, current_user, project, generation_type, extra_metadata
+    )
     result["project_id"] = project["project_id"]
     return result
 
@@ -253,6 +361,8 @@ async def revise_run(run_id: str, change_request: str, *, current_user: UserPubl
         initial_state={"requirements_json": existing},
         parent_run_id=run_id,
     )
+    # The revision is a new version of the documents, created now, by whoever requested it.
+    _apply_document_control(result, current_user.name)
     if project is not None:
         _record_generation_run(result, current_user, project, generation_type="revision")
         result["project_id"] = project["project_id"]
@@ -534,10 +644,12 @@ def load_run(run_id: str, current_user: UserPublic) -> Optional[dict]:
         futures = {t: pool.submit(_download, by_type[t]) for t in wanted if t in by_type}
         contents = {t: f.result() for t, f in futures.items()}
 
+    documents = {key: contents.get(doc_type) for doc_type, key in _DOCUMENT_TYPE_TO_RESULT_KEY.items()}
     return {
         "run_id": run_id,
         "requirements_json": json.loads(contents["REQUIREMENTS_JSON"]),
-        "documents": {key: contents.get(doc_type) for doc_type, key in _DOCUMENT_TYPE_TO_RESULT_KEY.items()},
+        # Also fills runs generated before Date/Author were filled in at generation time.
+        "documents": _with_document_control(run_id, documents),
         "consistency_report": contents.get("CONSISTENCY_REPORT"),
     }
 
@@ -569,22 +681,10 @@ def save_diagram_png(run_id: str, name: str, data_url: str, current_user: UserPu
     _authorize_run_access(run_id, current_user)
     run_dir = OUTPUT_ROOT / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
-    match = re.match(r"^data:image/png;base64,(.+)$", data_url, re.DOTALL)
-    raw = base64.b64decode(match.group(1) if match else data_url)
     out_path = run_dir / f"{name}.png"
-    out_path.write_bytes(raw)
+    out_path.write_bytes(decode_png_data_url(data_url))
     _sync_document(run_id, out_path)
     return out_path
-
-
-def _find_pandoc() -> str:
-    found = shutil.which("pandoc")
-    if found:
-        return found
-    fallback = Path.home() / "AppData" / "Local" / "Pandoc" / "pandoc.exe"
-    if fallback.exists():
-        return str(fallback)
-    raise RuntimeError("pandoc not found on PATH or at the default install location")
 
 
 _DOC_FILENAMES = {
@@ -594,7 +694,13 @@ _DOC_FILENAMES = {
 }
 
 
-def export_docx(run_id: str, doc: str, current_user: UserPublic) -> Path:
+def export_docx(
+    run_id: str, doc: str, current_user: UserPublic, diagram_parts: Optional[dict[str, list[DiagramPart]]] = None
+) -> Path:
+    """Exports one of the run's documents to a company-branded DOCX (see webapp/branding/).
+
+    diagram_parts is each diagram already split by the frontend into A4-page-sized images; any
+    diagram not in it falls back to the run's full-size PNG, scaled to fit one page."""
     _authorize_run_access(run_id, current_user)
     if doc not in _DOC_FILENAMES:
         raise ValueError(f"Unknown document '{doc}', expected one of {list(_DOC_FILENAMES)}")
@@ -603,25 +709,20 @@ def export_docx(run_id: str, doc: str, current_user: UserPublic) -> Path:
     if not md_path.exists():
         raise FileNotFoundError(f"{md_path} does not exist")
 
-    text = md_path.read_text(encoding="utf-8")
-    # Strip references to diagrams that were never rendered/uploaded, so export degrades
-    # gracefully instead of pandoc hard-failing on a missing image file.
-    for image_name in ("architecture.png", "flowchart.png"):
-        if not (run_dir / image_name).exists():
-            text = re.sub(rf"!\[[^\]]*\]\({re.escape(image_name)}\)\n?", "", text)
-
-    export_md_path = run_dir / f".export_{doc}.md"
+    # Unique per export, so two exports of the same run running at once don't share temp files.
+    prefix = f".export_{doc}_{uuid.uuid4().hex[:8]}"
+    state_key = f"{doc}_markdown"
+    text = _with_document_control(run_id, {state_key: md_path.read_text(encoding="utf-8")})[state_key]
+    text = place_diagrams(text, run_dir, diagram_parts or {}, prefix)
+    export_md_path = run_dir / f"{prefix}.md"
     export_md_path.write_text(text, encoding="utf-8")
 
     out_path = run_dir / f"{_DOC_FILENAMES[doc].rsplit('.', 1)[0]}.docx"
-    pandoc = _find_pandoc()
-    subprocess.run(
-        [pandoc, export_md_path.name, "-o", out_path.name],
-        cwd=str(run_dir),
-        check=True,
-        capture_output=True,
-    )
-    export_md_path.unlink(missing_ok=True)
+    try:
+        markdown_to_docx(export_md_path, out_path)
+    finally:
+        for temp_file in run_dir.glob(f"{prefix}*"):
+            temp_file.unlink(missing_ok=True)
     _sync_document(run_id, out_path)
     audit.insert_audit_log(
         user_id=current_user.user_id, action="BRD_DOWNLOADED", entity_type="run", entity_id=run_id, metadata={"doc": doc}

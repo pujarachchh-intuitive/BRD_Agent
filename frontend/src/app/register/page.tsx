@@ -22,7 +22,7 @@ export default function RegisterPage() {
     setSubmitting(true);
     try {
       await register(name, email, password);
-      router.replace("/");
+      router.replace("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed");
     } finally {

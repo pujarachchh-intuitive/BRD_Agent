@@ -1,4 +1,6 @@
-node_modules/
-.next/
+node_modules
+.next
 .env*
 tsconfig.tsbuildinfo
+# Fetched fresh inside the image build (see Dockerfile), never copied from a dev machine.
+public/fonts

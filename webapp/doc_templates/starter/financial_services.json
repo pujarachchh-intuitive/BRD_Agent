@@ -1,0 +1,344 @@
+{
+  "slug": "financial_services",
+  "name": "Financial Services",
+  "domain_id": "financial_services",
+  "description": "Starter content for US financial services systems, based on US federal regulations (GLBA privacy and safeguards rules, Bank Secrecy Act, OFAC, SEC Rule 13a-15) and PCI DSS v4.0.1. Confirm applicability with your compliance team.",
+  "icon": "finance",
+  "color": "#2563eb",
+  "content": {
+    "domain_guidance": "Scope: US financial services. This guidance and the starter items are based on US federal regulations and the PCI Data Security Standard. They are not legal advice and do not cover state law or non-US law.\nWhich rules apply depends on the type of institution, its regulators and what the system does:\n- Gramm-Leach-Bliley Act (GLBA) privacy: privacy notices and the consumer's right to opt out of disclosure of nonpublic personal information to nonaffiliated third parties. Regulation P (12 CFR Part 1016) covers many institutions; SEC-registered brokers, dealers, investment companies and investment advisers follow Regulation S-P (17 CFR Part 248); some other institutions follow other agencies' rules.\n- GLBA safeguards: non-bank financial institutions under FTC jurisdiction follow the FTC Safeguards Rule (16 CFR Part 314). Banks and credit unions follow information security standards issued by their federal regulator, such as the Interagency Guidelines Establishing Information Security Standards. Regulation S-P also contains safeguards requirements for SEC-registered firms.\n- Bank Secrecy Act (BSA) and anti-money laundering (AML): AML program, customer identification program (CIP), beneficial ownership of legal entity customers, suspicious activity reports (SARs), currency transaction reports (CTRs) and recordkeeping, under FinCEN rules in 31 CFR Chapter X. Requirements, thresholds and deadlines differ by institution type.\n- OFAC sanctions regulations (31 CFR Chapter V) apply to all US persons, not only financial institutions.\n- SEC Rule 13a-15, whose internal control over financial reporting (ICFR) provisions implement Sarbanes-Oxley Act section 404, applies only to SEC-reporting companies.\n- PCI DSS v4.0.1 applies to entities that store, process or transmit cardholder data or sensitive authentication data. Whether an entity must comply or validate compliance is decided by organizations that manage compliance programs, such as payment brands and acquirers.\nTerminology: nonpublic personal information (NPI), customer information, Qualified Individual, BSA/AML officer, CIP, customer due diligence (CDD), beneficial owner, SAR, CTR, SDN List, cardholder data environment (CDE), primary account number (PAN), sensitive authentication data (SAD), ICFR.\nDrafting rules: Never invent regulation names, section numbers, deadlines, retention periods, dollar thresholds, encryption algorithms or other numbers that are not present in the form or in this guidance. When a threshold or deadline depends on the institution type, say that the compliance team must confirm it. Phrase compliance points as items to confirm with the compliance, BSA/AML or legal team, not as legal conclusions. If the institution type or regulator is not stated, record it as an open question.",
+    "questions": [
+      {
+        "key": "handles_consumer_npi",
+        "text": "Will the system handle nonpublic personal information about consumers who obtain financial products or services for personal, family or household purposes?",
+        "default": true
+      },
+      {
+        "key": "ftc_safeguards",
+        "text": "Is the organization a non-bank financial institution under FTC jurisdiction, subject to the FTC Safeguards Rule (16 CFR Part 314)?",
+        "default": false
+      },
+      {
+        "key": "subject_to_bsa",
+        "text": "Is the organization a financial institution subject to Bank Secrecy Act AML rules (for example a bank, broker-dealer or money services business)?",
+        "default": false
+      },
+      {
+        "key": "sec_reporting",
+        "text": "Is the company an SEC-reporting company, and will the system support processes that feed its financial statements?",
+        "default": false
+      },
+      {
+        "key": "payment_cards",
+        "text": "Will the system store, process or transmit payment card account data (cardholder data or sensitive authentication data)?",
+        "default": false
+      }
+    ],
+    "items": {
+      "stakeholders": [
+        {
+          "key": "sh-bsa-aml-officer",
+          "values": {
+            "role": "BSA/AML compliance officer",
+            "interest": "The individual designated in the AML program as responsible for coordinating and monitoring day-to-day BSA compliance. Owns requirements for customer identification, monitoring, SAR and CTR reporting and BSA recordkeeping."
+          },
+          "tag": "regulatory",
+          "source": "BSA AML program rules, for banks 31 CFR 1020.210(a)(2)(iii); other institution types have their own AML program rule in 31 CFR Chapter X",
+          "source_url": "https://www.ecfr.gov/current/title-31/section-1020.210",
+          "applies_if": "subject_to_bsa"
+        },
+        {
+          "key": "sh-qualified-individual",
+          "values": {
+            "role": "Qualified Individual (FTC Safeguards Rule)",
+            "interest": "Designated to oversee, implement and enforce the information security program. Approves any exceptions to encryption or MFA and, unless the small-institution exception applies, reports in writing at least annually to the board or equivalent governing body."
+          },
+          "tag": "regulatory",
+          "source": "FTC Safeguards Rule, 16 CFR 314.4(a), (c)(3), (c)(5) and (i)",
+          "source_url": "https://www.ecfr.gov/current/title-16/section-314.4",
+          "applies_if": "ftc_safeguards"
+        }
+      ],
+      "functional_requirements": [
+        {
+          "key": "fr-privacy-notices",
+          "values": {
+            "description": "Deliver a clear and conspicuous privacy notice to each customer not later than when the customer relationship is established, and at least annually during the relationship unless the annual-notice exception applies. Confirm with compliance which GLBA privacy rule applies to the institution.",
+            "priority": "M"
+          },
+          "tag": "regulatory",
+          "source": "GLBA Privacy Rule, Regulation P, 12 CFR 1016.4 and 1016.5 (equivalent rules apply to some institutions, e.g. Regulation S-P)",
+          "source_url": "https://www.ecfr.gov/current/title-12/part-1016",
+          "applies_if": "handles_consumer_npi"
+        },
+        {
+          "key": "fr-privacy-opt-out",
+          "values": {
+            "description": "Before disclosing consumers' nonpublic personal information to nonaffiliated third parties (outside the rule's exceptions), provide an opt-out notice and a reasonable way to opt out, such as an electronic method if the consumer agrees to electronic delivery or a toll-free number. Record opt-outs, honor them as soon as reasonably practicable, allow opt-out at any time, and keep each opt-out in effect until the consumer revokes it.",
+            "priority": "M"
+          },
+          "tag": "regulatory",
+          "source": "GLBA Privacy Rule, Regulation P, 12 CFR 1016.7 and 1016.10",
+          "source_url": "https://www.ecfr.gov/current/title-12/section-1016.7",
+          "applies_if": "handles_consumer_npi"
+        },
+        {
+          "key": "fr-customer-identification",
+          "values": {
+            "description": "Where the institution's CIP rule applies, collect before account opening at least the customer's name, date of birth (for individuals), address and identification number, and support verifying the customer's identity within a reasonable time after opening using documentary and/or non-documentary methods. Confirm the exact CIP rule for the institution type with the BSA/AML officer.",
+            "priority": "M"
+          },
+          "tag": "regulatory",
+          "source": "BSA Customer Identification Program rule, for banks 31 CFR 1020.220(a)(2)",
+          "source_url": "https://www.ecfr.gov/current/title-31/section-1020.220",
+          "applies_if": "subject_to_bsa"
+        },
+        {
+          "key": "fr-beneficial-ownership",
+          "values": {
+            "description": "For covered institutions (banks, securities brokers or dealers, mutual funds, futures commission merchants and introducing brokers), capture and verify the beneficial owners of legal entity customers: each individual owning directly or indirectly 25 percent or more of the equity interests, and one individual with significant responsibility to control, manage or direct the entity. Keep a record of the information obtained.",
+            "priority": "M"
+          },
+          "tag": "regulatory",
+          "source": "FinCEN CDD rule, 31 CFR 1010.230(b), (d) and (i); covered institutions defined in 31 CFR 1010.605(e)(1)",
+          "source_url": "https://www.ecfr.gov/current/title-31/section-1010.230",
+          "applies_if": "subject_to_bsa"
+        },
+        {
+          "key": "fr-suspicious-activity-reporting",
+          "values": {
+            "description": "Support monitoring, investigation and filing of Suspicious Activity Reports (SARs) within the timelines of the institution's SAR rule. For banks: reportable transactions involve or aggregate at least $5,000 and meet the rule's criteria; file no later than 30 calendar days after initial detection, with up to 30 more days only if no suspect has been identified, and never more than 60 days. Thresholds differ for other institution types.",
+            "priority": "M"
+          },
+          "tag": "regulatory",
+          "source": "BSA SAR rules, for banks 31 CFR 1020.320(a)(2) and (b)(3)",
+          "source_url": "https://www.ecfr.gov/current/title-31/section-1020.320",
+          "applies_if": "subject_to_bsa"
+        },
+        {
+          "key": "fr-currency-transaction-reporting",
+          "values": {
+            "description": "If the institution handles cash, identify transactions in currency of more than $10,000, including multiple transactions known to be by or on behalf of the same person that total more than $10,000 in one business day, and support filing a Currency Transaction Report within 15 days after the transaction, subject to applicable exemptions. Casinos follow separate rules.",
+            "priority": "M"
+          },
+          "tag": "regulatory",
+          "source": "BSA CTR rules, 31 CFR 1010.311, 1010.313(b) and 1010.306(a)(1)",
+          "source_url": "https://www.ecfr.gov/current/title-31/section-1010.311",
+          "applies_if": "subject_to_bsa"
+        },
+        {
+          "key": "fr-sanctions-screening",
+          "values": {
+            "description": "Screen customers, counterparties and transactions against OFAC sanctions lists such as the SDN List, keep the lists current, account for alternative spellings, and route potential matches for review before processing. OFAC regulations prohibit many dealings with sanctioned parties and jurisdictions but do not prescribe a specific screening method; the approach should follow the organization's risk assessment.",
+            "priority": "M"
+          },
+          "tag": "best_practice",
+          "source": "OFAC, A Framework for OFAC Compliance Commitments",
+          "source_url": "https://ofac.treasury.gov/media/16331/download?inline",
+          "applies_if": null
+        }
+      ],
+      "non_functional_requirements": [
+        {
+          "key": "nfr-ftc-access-mfa",
+          "values": {
+            "category": "Security",
+            "requirement": "Authenticate and permit access only to authorized users, limit each user's access to the customer information needed for their duties, and require multi-factor authentication for any individual accessing any information system, unless the Qualified Individual has approved in writing reasonably equivalent or more secure access controls."
+          },
+          "tag": "regulatory",
+          "source": "FTC Safeguards Rule, 16 CFR 314.4(c)(1) and (c)(5)",
+          "source_url": "https://www.ecfr.gov/current/title-16/section-314.4",
+          "applies_if": "ftc_safeguards"
+        },
+        {
+          "key": "nfr-ftc-encryption",
+          "values": {
+            "category": "Security",
+            "requirement": "Encrypt all customer information held or transmitted, both in transit over external networks and at rest. If encryption is infeasible, use effective alternative compensating controls reviewed and approved by the Qualified Individual."
+          },
+          "tag": "regulatory",
+          "source": "FTC Safeguards Rule, 16 CFR 314.4(c)(3)",
+          "source_url": "https://www.ecfr.gov/current/title-16/section-314.4",
+          "applies_if": "ftc_safeguards"
+        },
+        {
+          "key": "nfr-ftc-activity-monitoring",
+          "values": {
+            "category": "Security",
+            "requirement": "Monitor and log the activity of authorized users and detect unauthorized access to, use of, or tampering with customer information by those users."
+          },
+          "tag": "regulatory",
+          "source": "FTC Safeguards Rule, 16 CFR 314.4(c)(8)",
+          "source_url": "https://www.ecfr.gov/current/title-16/section-314.4",
+          "applies_if": "ftc_safeguards"
+        },
+        {
+          "key": "nfr-sar-confidentiality",
+          "values": {
+            "category": "Security",
+            "requirement": "Restrict access to SARs and to any information that would reveal the existence of a SAR to authorized personnel, and prevent the system from disclosing such information to the subject of the report or other unauthorized parties."
+          },
+          "tag": "regulatory",
+          "source": "BSA SAR confidentiality, for banks 31 CFR 1020.320(e)",
+          "source_url": "https://www.ecfr.gov/current/title-31/section-1020.320",
+          "applies_if": "subject_to_bsa"
+        },
+        {
+          "key": "nfr-pci-no-sad-storage",
+          "values": {
+            "category": "Security",
+            "requirement": "Do not retain sensitive authentication data after authorization, even if encrypted. All sensitive authentication data received must be rendered unrecoverable when the authorization process completes."
+          },
+          "tag": "regulatory",
+          "source": "PCI DSS v4.0.1 Requirement 3.3.1",
+          "source_url": "https://www.pcisecuritystandards.org/document_library/",
+          "applies_if": "payment_cards"
+        },
+        {
+          "key": "nfr-pci-pan-protection",
+          "values": {
+            "category": "Security",
+            "requirement": "Render PAN unreadable anywhere it is stored, including backups and logs, using one-way hashes of the entire PAN, truncation, index tokens, or strong cryptography with key management. Mask PAN when displayed so that only personnel with a legitimate business need can see more than the BIN and last four digits."
+          },
+          "tag": "regulatory",
+          "source": "PCI DSS v4.0.1 Requirements 3.5.1 and 3.4.1",
+          "source_url": "https://www.pcisecuritystandards.org/document_library/",
+          "applies_if": "payment_cards"
+        },
+        {
+          "key": "nfr-pci-transmission",
+          "values": {
+            "category": "Security",
+            "requirement": "Protect PAN during transmission over open, public networks with strong cryptography and security protocols: accept only trusted keys and certificates, confirm certificates are valid and not expired or revoked, and support only secure protocol versions and configurations with no fallback to insecure ones."
+          },
+          "tag": "regulatory",
+          "source": "PCI DSS v4.0.1 Requirement 4.2.1",
+          "source_url": "https://www.pcisecuritystandards.org/document_library/",
+          "applies_if": "payment_cards"
+        },
+        {
+          "key": "nfr-pci-mfa",
+          "values": {
+            "category": "Security",
+            "requirement": "Implement multi-factor authentication for all access into the cardholder data environment (CDE) and for all remote network access originating from outside the entity's network that could access or impact the CDE, including access by third parties and vendors."
+          },
+          "tag": "regulatory",
+          "source": "PCI DSS v4.0.1 Requirements 8.4.2 and 8.4.3",
+          "source_url": "https://www.pcisecuritystandards.org/document_library/",
+          "applies_if": "payment_cards"
+        },
+        {
+          "key": "nfr-pci-audit-logs",
+          "values": {
+            "category": "Security",
+            "requirement": "Enable audit logs for all system components and cardholder data, and retain audit log history for at least 12 months, with at least the most recent three months immediately available for analysis."
+          },
+          "tag": "regulatory",
+          "source": "PCI DSS v4.0.1 Requirements 10.2.1 and 10.5.1",
+          "source_url": "https://www.pcisecuritystandards.org/document_library/",
+          "applies_if": "payment_cards"
+        }
+      ],
+      "constraints": [
+        {
+          "key": "con-bsa-record-retention",
+          "values": {
+            "text": "Retain records required by the BSA regulations for five years, stored so that they are accessible within a reasonable period of time. This includes copies of filed CTRs and, for banks, copies of filed SARs and their supporting documentation for five years from the filing date."
+          },
+          "tag": "regulatory",
+          "source": "31 CFR 1010.430(d), 1010.306(a)(2) and, for banks, 1020.320(d)",
+          "source_url": "https://www.ecfr.gov/current/title-31/section-1010.430",
+          "applies_if": "subject_to_bsa"
+        },
+        {
+          "key": "con-ofac-reporting-records",
+          "values": {
+            "text": "Support reports to OFAC within 10 business days after property is blocked or a prohibited transaction is rejected. Keep full and accurate records of transactions subject to OFAC regulations available for examination for at least 10 years after the transaction, and records of blocked property for as long as it is blocked and at least 10 years after it is unblocked."
+          },
+          "tag": "regulatory",
+          "source": "OFAC Reporting, Procedures and Penalties Regulations, 31 CFR 501.601, 501.603(b)(1)(i) and 501.604(c)",
+          "source_url": "https://www.ecfr.gov/current/title-31/part-501",
+          "applies_if": null
+        },
+        {
+          "key": "con-ftc-breach-notification",
+          "values": {
+            "text": "If a notification event (acquisition of unencrypted customer information without the individual's authorization) involves the information of at least 500 consumers, notify the FTC as soon as possible and no later than 30 days after discovery, using the form on the FTC website."
+          },
+          "tag": "regulatory",
+          "source": "FTC Safeguards Rule, 16 CFR 314.4(j) and 314.2(m)",
+          "source_url": "https://www.ecfr.gov/current/title-16/section-314.4",
+          "applies_if": "ftc_safeguards"
+        },
+        {
+          "key": "con-ftc-secure-disposal",
+          "values": {
+            "text": "Securely dispose of customer information no later than two years after it was last used to provide a product or service to the customer, unless it is needed for business operations or other legitimate business purposes, must be kept by law or regulation, or targeted disposal is not reasonably feasible. Periodically review the data retention policy."
+          },
+          "tag": "regulatory",
+          "source": "FTC Safeguards Rule, 16 CFR 314.4(c)(6)",
+          "source_url": "https://www.ecfr.gov/current/title-16/section-314.4",
+          "applies_if": "ftc_safeguards"
+        },
+        {
+          "key": "con-sox-icfr",
+          "values": {
+            "text": "Confirm with the SOX/ICFR team whether this system is in scope of internal control over financial reporting. Management evaluates ICFR effectiveness as of each fiscal year end and evaluates any change that has materially affected, or is reasonably likely to materially affect, ICFR during each fiscal quarter, so changes to in-scope systems must be coordinated with that team."
+          },
+          "tag": "regulatory",
+          "source": "SEC Rule 13a-15(c) and (d), 17 CFR 240.13a-15 (ICFR provisions implement Sarbanes-Oxley Act section 404)",
+          "source_url": "https://www.ecfr.gov/current/title-17/section-240.13a-15",
+          "applies_if": "sec_reporting"
+        }
+      ],
+      "risks": [
+        {
+          "key": "risk-customer-data-breach",
+          "values": {
+            "risk": "Unauthorized access to customer financial information, leading to regulatory notification obligations, fraud and customer harm.",
+            "impact": "High",
+            "mitigation": "Least-privilege access, multi-factor authentication, encryption, activity monitoring and a tested incident response plan."
+          },
+          "tag": "best_practice",
+          "source": "Industry practice",
+          "source_url": null,
+          "applies_if": null
+        },
+        {
+          "key": "risk-sanctions-screening-gaps",
+          "values": {
+            "risk": "Sanctions screening misses a match because lists are out of date, key identifiers are missing, or alternative spellings are not handled.",
+            "impact": "High",
+            "mitigation": "Update screening lists promptly, include relevant identifiers, handle name variations, and periodically test the screening logic."
+          },
+          "tag": "best_practice",
+          "source": "OFAC, A Framework for OFAC Compliance Commitments, root causes section on sanctions screening software or filter faults",
+          "source_url": "https://ofac.treasury.gov/media/16331/download?inline",
+          "applies_if": null
+        }
+      ],
+      "open_questions": [
+        {
+          "key": "oq-institution-type",
+          "values": {
+            "text": "What type of institution is this (for example bank, credit union, broker-dealer, investment adviser, money services business or non-bank lender), and who are its regulators? This decides which privacy, safeguards, AML and incident notification rules apply; for a bank or credit union, confirm which information security standards and computer-security incident notification rule of its federal regulator apply. Which state laws also apply?"
+          },
+          "tag": "best_practice",
+          "source": "Industry practice; for example, for national banks, OCC 12 CFR Part 30 Appendix B and 12 CFR Part 53",
+          "source_url": "https://www.ecfr.gov/current/title-12/part-53",
+          "applies_if": null
+        },
+        {
+          "key": "oq-beneficial-ownership-relief",
+          "values": {
+            "text": "Will the institution rely on FinCEN's February 13, 2026 exceptive relief order, which limits when beneficial owners must be identified and verified again when an existing legal entity customer opens a new account? Confirm with the BSA/AML officer."
+          },
+          "tag": "best_practice",
+          "source": "FinCEN news release, FinCEN Issues Exceptive Relief to Streamline Customer Due Diligence Requirements",
+          "source_url": "https://www.fincen.gov/news/news-releases/fincen-issues-exceptive-relief-streamline-customer-due-diligence-requirements",
+          "applies_if": "subject_to_bsa"
+        }
+      ]
+    }
+  }
+}

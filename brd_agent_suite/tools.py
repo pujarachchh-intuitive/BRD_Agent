@@ -14,7 +14,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from google.adk.agents import BaseAgent
 from google.adk.runners import Runner
@@ -99,6 +99,7 @@ async def run_pipeline_and_write(
     message_text: Optional[str] = None,
     initial_state: Optional[dict[str, Any]] = None,
     parent_run_id: Optional[str] = None,
+    on_agent_done: Optional[Callable[[str], None]] = None,
 ) -> dict:
     """Runs pipeline_agent to completion in its own session and writes its outputs to OUTPUT_ROOT/run_id.
 
@@ -113,6 +114,9 @@ async def run_pipeline_and_write(
             {requirements_json} template variables from).
         parent_run_id: If this run is a "request a change" revision of an earlier run, that run's
             id — persisted to run_meta.json so the run history can be shown as a hierarchy.
+        on_agent_done: If given, called with an agent's name each time that agent produces its
+            final response — lets a caller report progress ("BRD done", "TSD done") while the
+            pipeline is still running.
 
     Returns:
         A dict with run_id, output_dir, files (state key -> written path), missing (state keys with
@@ -132,8 +136,11 @@ async def run_pipeline_and_write(
 
     new_message = types.Content(role="user", parts=[types.Part(text=message_text or "Proceed.")])
 
-    async for _event in runner.run_async(user_id=user_id, session_id=session.id, new_message=new_message):
-        pass  # The pipeline's agents write everything to session state via output_key.
+    # The pipeline's agents write everything to session state via output_key; events are only
+    # looked at to report progress.
+    async for event in runner.run_async(user_id=user_id, session_id=session.id, new_message=new_message):
+        if on_agent_done is not None and event.author and event.is_final_response():
+            on_agent_done(event.author)
 
     final_session = await session_service.get_session(app_name=APP_NAME, user_id=user_id, session_id=run_id)
     state = final_session.state
@@ -161,6 +168,30 @@ async def run_pipeline_and_write(
         },
         "consistency_report": state.get("consistency_report", "(consistency check did not run)"),
     }
+
+
+async def run_agent_to_state(
+    agent: BaseAgent,
+    session_id: str,
+    parts: list[types.Part],
+    initial_state: Optional[dict[str, Any]] = None,
+) -> dict:
+    """Runs a single agent (not a document pipeline) on a user turn made of arbitrary parts
+    (text and/or attached files) and returns its final session state. Nothing is written to disk.
+
+    session_id doubles as the observability log name (logs/<session_id>.jsonl), so pass the same
+    id for every call that belongs to one logical run to get one combined cost record."""
+    session_service = InMemorySessionService()
+    user_id = "brd_agent_user"
+    session = await session_service.create_session(
+        app_name=APP_NAME, user_id=user_id, session_id=session_id, state=initial_state
+    )
+    runner = Runner(agent=agent, app_name=APP_NAME, session_service=session_service)
+    new_message = types.Content(role="user", parts=parts)
+    async for _event in runner.run_async(user_id=user_id, session_id=session.id, new_message=new_message):
+        pass
+    final_session = await session_service.get_session(app_name=APP_NAME, user_id=user_id, session_id=session_id)
+    return dict(final_session.state)
 
 
 async def generate_all_documents(context: str) -> dict:

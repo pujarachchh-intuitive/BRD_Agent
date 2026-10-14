@@ -1,16 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, FilePlus2, History, LayoutDashboard, LogOut, Sparkles } from "lucide-react";
+import { ChevronLeft, ChevronRight, FilePlus2, History, LayoutDashboard, LayoutTemplate, LogOut, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/AuthContext";
 
 const NAV_LINKS = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/new", label: "New Request", icon: FilePlus2 },
   { href: "/history", label: "History", icon: History },
 ];
+
+// Only rendered for admins; the backend refuses these routes to anyone else regardless.
+const ADMIN_LINKS = [{ href: "/admin/templates", label: "Template Studio", icon: LayoutTemplate }];
 
 const COLLAPSED_KEY = "brdAgentSuite.sidebarCollapsed";
 
@@ -71,22 +74,29 @@ export default function Sidebar() {
       </div>
 
       <nav className="sidebar-nav">
-        <span className="sidebar-section-label">Workspace</span>
-        {NAV_LINKS.map((link) => {
-          const isActive = link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);
-          const Icon = link.icon;
-          return (
-            <Link
-              key={link.href}
-              href={link.href}
-              className={`sidebar-link${isActive ? " active" : ""}`}
-              title={collapsed ? link.label : undefined}
-            >
-              <Icon size={17} strokeWidth={2} />
-              <span className="sidebar-link-label">{link.label}</span>
-            </Link>
-          );
-        })}
+        {[
+          { label: "Workspace", links: NAV_LINKS },
+          ...(user?.role === "ADMIN" ? [{ label: "Admin", links: ADMIN_LINKS }] : []),
+        ].map((group) => (
+          <div key={group.label} className="contents">
+            <span className="sidebar-section-label">{group.label}</span>
+            {group.links.map((link) => {
+              const isActive = pathname.startsWith(link.href);
+              const Icon = link.icon;
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={`sidebar-link${isActive ? " active" : ""}`}
+                  title={collapsed ? link.label : undefined}
+                >
+                  <Icon size={17} strokeWidth={2} />
+                  <span className="sidebar-link-label">{link.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        ))}
       </nav>
 
       {user && (

@@ -19,6 +19,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY brd_agent_suite ./brd_agent_suite
 COPY webapp ./webapp
 
+# Satoshi, embedded into every exported DOCX (webapp/branding/). Downloaded from Fontshare here
+# rather than committed: the font licence forbids redistributing it from our public repo.
+RUN python -m webapp.branding.fonts --docx-only
+
 # brd_agent_suite/output and brd_agent_suite/logs are mounted from Azure Files in production so
 # run history survives restarts; created here so the app also works without the mounts.
 RUN mkdir -p brd_agent_suite/output brd_agent_suite/logs
